@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { workOrderService } from '../../services/workOrderService';
 import { economicsService } from '../../services/economicsService';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
-import { Loader2, Search, X, TrendingUp, TrendingDown, Wallet, Euro, Building2 } from 'lucide-react';
+import { Loader2, Search, X, TrendingUp, Wallet, Building2 } from 'lucide-react';
 import { Input } from '../../components/ui/input';
 import { Button } from '../../components/ui/button';
 import { cn } from '../../utils/cn';

@@ -166,7 +166,7 @@ export const economicsService = {
         });
     },
 
-    async copyFromPreventivo(workOrderId: string, priceListId: string) {
+    async copyFromPreventivo(workOrderId: string) {
         // ... (existing code, ensure it matches previous context if I need to replace it entirely, but here I am appending or inserting)
         // Actually, I'll just append this new method at the end of the object.
         // Wait, replace_file_content replaces a block. I need to be careful to match the existing content or surrounding lines.

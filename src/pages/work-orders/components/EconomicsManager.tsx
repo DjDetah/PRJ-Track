@@ -85,7 +85,7 @@ export function EconomicsManager({ workOrderId, type, priceListId, items, onUpda
         setCopying(true);
         try {
             if (priceListId) {
-                const res = await economicsService.copyFromPreventivo(workOrderId, priceListId);
+                const res = await economicsService.copyFromPreventivo(workOrderId);
                 alert(`Copiati ${res.count} elementi.`);
                 onUpdate();
             }

@@ -336,6 +336,7 @@ export interface Database {
                     system_created_at?: string | null
                     system_updated_at?: string | null
                     price_list_id?: string | null
+                    notes?: string | null
                 }
             }
         }
