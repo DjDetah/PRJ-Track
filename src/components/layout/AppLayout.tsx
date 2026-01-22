@@ -31,7 +31,8 @@ export default function AppLayout() {
         { name: 'Work Orders', path: '/work-orders', icon: ClipboardList },
         { name: 'Progetti', path: '/projects', icon: FolderKanban },
         { name: 'Listini', path: '/lists', icon: ScrollText }, // Add Listini
-        { name: 'Import Excel', path: '/import', icon: Settings }, // Changed Settings to generic import for now
+        { name: 'Import Excel', path: '/import', icon: ClipboardList }, // Changed Settings to generic import for now
+        { name: 'Impostazioni', path: '/settings', icon: Settings },
     ];
 
     return (

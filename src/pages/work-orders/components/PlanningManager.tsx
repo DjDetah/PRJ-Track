@@ -6,12 +6,14 @@ import { Input } from '../../../components/ui/input';
 import { Textarea } from '../../../components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '../../../components/ui/dialog';
 import { Label } from '../../../components/ui/label';
-import { Plus, Trash2, CalendarClock, AlertCircle, Building2 } from 'lucide-react';
+import { Plus, Trash2, CalendarClock, AlertCircle, Building2, CheckCircle2, XCircle, Clock } from 'lucide-react';
 import type { Database } from '../../../types/supabase';
 import { Select } from '../../../components/ui/select';
 import { EconomicsManager } from './EconomicsManager';
 import { economicsService, type WorkOrderItem } from '../../../services/economicsService';
 import { priceListService, type PriceList } from '../../../services/priceListService';
+import { settingsService, type FailureReason } from '../../../services/settingsService';
+import { Badge } from '../../../components/ui/badge';
 
 type Pianificazione = Database['public']['Tables']['pianificazioni']['Row'] & {
     fornitori?: { ragione_sociale: string } | null;
@@ -27,6 +29,7 @@ export function PlanningManager({ workOrderId, status, onUpdate }: PlanningManag
     const [plannings, setPlannings] = useState<Pianificazione[]>([]);
     const [suppliers, setSuppliers] = useState<Fornitore[]>([]);
     const [supplierPriceLists, setSupplierPriceLists] = useState<PriceList[]>([]);
+    const [failureReasons, setFailureReasons] = useState<FailureReason[]>([]);
 
     // Modal State
     const [open, setOpen] = useState(false);
@@ -36,6 +39,10 @@ export function PlanningManager({ workOrderId, status, onUpdate }: PlanningManag
     const [noteChiusura, setNoteChiusura] = useState('');
     const [selectedSupplierId, setSelectedSupplierId] = useState<string | undefined>(undefined);
     const [selectedPriceListId, setSelectedPriceListId] = useState<string | undefined>(undefined);
+
+    // Outcome State
+    const [esito, setEsito] = useState<'IN CORSO' | 'OK' | 'NON OK' | ''>('');
+    const [motivazione, setMotivazione] = useState('');
 
     // Consuntivi State (for the modal)
     const [planningConsuntivi, setPlanningConsuntivi] = useState<WorkOrderItem[]>([]);
@@ -49,6 +56,7 @@ export function PlanningManager({ workOrderId, status, onUpdate }: PlanningManag
         loadPlannings();
         loadSuppliers();
         loadPriceLists();
+        loadFailureReasons();
     }, [workOrderId]);
 
     const loadPlannings = async () => {
@@ -78,6 +86,15 @@ export function PlanningManager({ workOrderId, status, onUpdate }: PlanningManag
         }
     };
 
+    const loadFailureReasons = async () => {
+        try {
+            const data = await settingsService.getActiveFailureReasons();
+            setFailureReasons(data || []);
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
     const loadPlanningConsuntivi = async (planningId: string) => {
         try {
             const data = await economicsService.getByPlanning(planningId);
@@ -89,42 +106,52 @@ export function PlanningManager({ workOrderId, status, onUpdate }: PlanningManag
 
     const handleRowClick = (planning: Pianificazione) => {
         setSelectedId(planning.id);
-        const d = new Date(planning.data_pianificazione);
-        const formattedDate = d.toISOString().slice(0, 16);
+        if (planning.data_pianificazione) {
+            const d = new Date(planning.data_pianificazione);
+            const formattedDate = d.toISOString().slice(0, 16);
+            setDate(formattedDate);
+        } else {
+            setDate('');
+        }
 
-        setDate(formattedDate);
         setNoteImportanti(planning.note_importanti || '');
         setNoteChiusura(planning.note_chiusura || '');
         setSelectedSupplierId(planning.fornitore_id || undefined);
         setSelectedPriceListId(planning.price_list_id || undefined);
+        setEsito(planning.esito || '');
+        setMotivazione(planning.motivazione_fallimento || '');
 
         loadPlanningConsuntivi(planning.id);
         setOpen(true);
     };
 
     const handleSave = async () => {
-        if (!date) return;
+        // Validation: require either date or supplier
+        if (!date && !selectedSupplierId) return;
+
+        // Validation: Non OK requires reason
+        if (esito === 'NON OK' && !motivazione) return;
+
         setSaving(true);
         try {
-            const dateObj = new Date(date);
-            const isoString = dateObj.toISOString();
+            const isoString = date ? new Date(date).toISOString() : null;
+
+            const payload = {
+                date: isoString,
+                noteImportanti: noteImportanti || undefined,
+                noteChiusura: noteChiusura || undefined,
+                fornitoreId: selectedSupplierId,
+                priceListId: selectedPriceListId,
+                esito: esito || undefined,
+                motivazioneFallimento: (esito === 'NON OK' ? motivazione : null) || undefined
+            };
 
             if (selectedId) {
-                await workOrderService.updatePianificazione(selectedId, {
-                    date: isoString,
-                    noteImportanti: noteImportanti || undefined,
-                    noteChiusura: noteChiusura || undefined,
-                    fornitoreId: selectedSupplierId,
-                    priceListId: selectedPriceListId
-                });
+                await workOrderService.updatePianificazione(selectedId, payload);
             } else {
                 await workOrderService.addPianificazione({
                     workOrderId,
-                    date: isoString,
-                    noteImportanti: noteImportanti || undefined,
-                    noteChiusura: noteChiusura || undefined,
-                    fornitoreId: selectedSupplierId,
-                    priceListId: selectedPriceListId
+                    ...payload
                 });
             }
 
@@ -157,7 +184,18 @@ export function PlanningManager({ workOrderId, status, onUpdate }: PlanningManag
         setNoteChiusura('');
         setSelectedSupplierId(undefined);
         setSelectedPriceListId(undefined);
+        setEsito('');
+        setMotivazione('');
         setPlanningConsuntivi([]);
+    };
+
+    const getEsitoBadge = (esito: string | null) => {
+        switch (esito) {
+            case 'OK': return <Badge className="bg-green-500 hover:bg-green-600"><CheckCircle2 className="w-3 h-3 mr-1" /> OK</Badge>;
+            case 'NON OK': return <Badge variant="destructive"><XCircle className="w-3 h-3 mr-1" /> KO</Badge>;
+            case 'IN CORSO': return <Badge variant="secondary" className="bg-blue-100 text-blue-800 hover:bg-blue-200"><Clock className="w-3 h-3 mr-1" /> In Corso</Badge>;
+            default: return null;
+        }
     };
 
     return (
@@ -181,6 +219,7 @@ export function PlanningManager({ workOrderId, status, onUpdate }: PlanningManag
                         <tr>
                             <th className="p-2 font-medium text-muted-foreground w-1/4">Data</th>
                             <th className="p-2 font-medium text-muted-foreground w-1/4">Fornitore</th>
+                            <th className="p-2 font-medium text-muted-foreground w-1/6">Esito</th>
                             <th className="p-2 font-medium text-muted-foreground">Note</th>
                             <th className="p-2 w-[50px]"></th>
                         </tr>
@@ -188,7 +227,7 @@ export function PlanningManager({ workOrderId, status, onUpdate }: PlanningManag
                     <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                         {plannings.length === 0 ? (
                             <tr>
-                                <td colSpan={4} className="p-4 text-center text-muted-foreground italic">
+                                <td colSpan={5} className="p-4 text-center text-muted-foreground italic">
                                     Nessuna pianificazione inserita.
                                 </td>
                             </tr>
@@ -200,10 +239,10 @@ export function PlanningManager({ workOrderId, status, onUpdate }: PlanningManag
                                     onClick={() => handleRowClick(p)}
                                 >
                                     <td className="p-2 font-medium align-top">
-                                        {new Date(p.data_pianificazione).toLocaleString('it-IT', {
+                                        {p.data_pianificazione ? new Date(p.data_pianificazione).toLocaleString('it-IT', {
                                             day: '2-digit', month: '2-digit', year: 'numeric',
                                             hour: '2-digit', minute: '2-digit'
-                                        })}
+                                        }) : <span className="text-slate-400 italic">Non pianificato</span>}
                                     </td>
                                     <td className="p-2 text-xs align-top">
                                         {p.fornitori?.ragione_sociale ? (
@@ -214,6 +253,16 @@ export function PlanningManager({ workOrderId, status, onUpdate }: PlanningManag
                                         ) : (
                                             <span className="text-slate-400 italic">-</span>
                                         )}
+                                    </td>
+                                    <td className="p-2 align-top">
+                                        <div className="flex flex-col gap-1 items-start">
+                                            {getEsitoBadge(p.esito)}
+                                            {p.esito === 'NON OK' && p.motivazione_fallimento && (
+                                                <span className="text-[10px] uppercase font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded border border-red-100">
+                                                    {p.motivazione_fallimento}
+                                                </span>
+                                            )}
+                                        </div>
                                     </td>
                                     <td className="p-2 text-xs align-top">
                                         {(p.note_importanti || p.note_chiusura) ? (
@@ -278,7 +327,7 @@ export function PlanningManager({ workOrderId, status, onUpdate }: PlanningManag
                                 <fieldset disabled={isReadOnly} className="space-y-6 group-disabled:opacity-50">
                                     <div className="space-y-2">
                                         <Label htmlFor="date" className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                                            Data Pianificazione <span className="text-red-500">*</span>
+                                            Data Pianificazione
                                         </Label>
                                         <Input
                                             id="date"
@@ -288,6 +337,7 @@ export function PlanningManager({ workOrderId, status, onUpdate }: PlanningManag
                                             className="font-mono disabled:opacity-50 h-10"
                                             disabled={isReadOnly}
                                         />
+                                        <p className="text-[10px] text-muted-foreground">Obbligatoria per gestire i consuntivi</p>
                                     </div>
 
                                     <div className="space-y-2">
@@ -335,9 +385,56 @@ export function PlanningManager({ workOrderId, status, onUpdate }: PlanningManag
                                 </fieldset>
                             </div>
 
-                            {/* Right Column: Notes */}
+                            {/* Right Column: Outcomes & Notes */}
                             <div className="space-y-6">
                                 <fieldset disabled={isReadOnly} className="space-y-6 group-disabled:opacity-50">
+
+                                    {/* Outcome Section */}
+                                    <div className="grid grid-cols-2 gap-4 p-4 bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-100 dark:border-slate-800">
+                                        <div className="space-y-2">
+                                            <Label htmlFor="esito" className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                                                Esito Intervento
+                                            </Label>
+                                            <Select
+                                                id="esito"
+                                                value={esito}
+                                                onChange={(e) => {
+                                                    const val = e.target.value as any;
+                                                    setEsito(val);
+                                                    if (val !== 'NON OK') setMotivazione('');
+                                                }}
+                                                disabled={isReadOnly}
+                                            >
+                                                <option value="">- Non Definito -</option>
+                                                <option value="IN CORSO">In Corso</option>
+                                                <option value="OK">OK - Completato</option>
+                                                <option value="NON OK">NON OK - Fallito</option>
+                                            </Select>
+                                        </div>
+
+                                        {esito === 'NON OK' && (
+                                            <div className="space-y-2">
+                                                <Label htmlFor="motivazione" className="text-xs font-semibold uppercase tracking-wider text-red-500">
+                                                    Motivazione Fallimento
+                                                </Label>
+                                                <Select
+                                                    id="motivazione"
+                                                    value={motivazione}
+                                                    onChange={(e) => setMotivazione(e.target.value)}
+                                                    disabled={isReadOnly}
+                                                    className="border-red-200 focus:ring-red-500"
+                                                >
+                                                    <option value="">Seleziona Causa...</option>
+                                                    {failureReasons.map(r => (
+                                                        <option key={r.id} value={r.reason}>
+                                                            {r.reason}
+                                                        </option>
+                                                    ))}
+                                                </Select>
+                                            </div>
+                                        )}
+                                    </div>
+
                                     <div className="space-y-2">
                                         <Label htmlFor="note" className="text-xs font-semibold uppercase tracking-wider text-slate-500">
                                             Note Importanti
@@ -371,7 +468,7 @@ export function PlanningManager({ workOrderId, status, onUpdate }: PlanningManag
 
                         {selectedId && (
                             <div className="mt-8 pt-6 border-t border-slate-100 dark:border-slate-800">
-                                {selectedPriceListId ? (
+                                {(selectedPriceListId && date) ? (
                                     <EconomicsManager
                                         workOrderId={workOrderId}
                                         type="consuntivo"
@@ -382,8 +479,16 @@ export function PlanningManager({ workOrderId, status, onUpdate }: PlanningManag
                                         readOnly={isReadOnly}
                                     />
                                 ) : (
-                                    <div className="p-4 border border-dashed border-amber-200 bg-amber-50 rounded text-amber-800 text-sm text-center">
-                                        Seleziona un Listino Fornitore e salva per gestire i consuntivi.
+                                    <div className="p-4 border border-dashed border-amber-200 bg-amber-50 rounded text-amber-800 text-sm text-center flex flex-col items-center gap-1">
+                                        <span>Per gestire i consuntivi è necessario:</span>
+                                        <div className="flex gap-4 text-xs font-bold">
+                                            <span className={date ? "text-green-600 flex items-center gap-1" : "text-red-500 flex items-center gap-1"}>
+                                                {date ? "✓ Data Inserita" : "✕ Data Mancante"}
+                                            </span>
+                                            <span className={selectedPriceListId ? "text-green-600 flex items-center gap-1" : "text-red-500 flex items-center gap-1"}>
+                                                {selectedPriceListId ? "✓ Listino Selezionato" : "✕ Listino Mancante"}
+                                            </span>
+                                        </div>
                                     </div>
                                 )}
                             </div>
@@ -393,7 +498,14 @@ export function PlanningManager({ workOrderId, status, onUpdate }: PlanningManag
                     <DialogFooter className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 gap-2 shrink-0">
                         <Button variant="outline" onClick={() => setOpen(false)}>Chiudi</Button>
                         {!isReadOnly && (
-                            <Button onClick={handleSave} disabled={!date || saving}>
+                            <Button
+                                onClick={handleSave}
+                                disabled={
+                                    (!date && !selectedSupplierId) ||
+                                    saving ||
+                                    (esito === 'NON OK' && !motivazione)
+                                }
+                            >
                                 {saving ? "Salvataggio..." : "Salva Pianificazione"}
                             </Button>
                         )}

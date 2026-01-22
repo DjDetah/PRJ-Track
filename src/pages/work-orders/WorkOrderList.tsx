@@ -219,6 +219,9 @@ export default function WorkOrderList() {
                                         </div>
                                     </th>
                                     <th className="h-10 px-2 align-middle font-medium text-muted-foreground">
+                                        Gestione
+                                    </th>
+                                    <th className="h-10 px-2 align-middle font-medium text-muted-foreground">
                                         Pianificazione
                                     </th>
                                     <th
@@ -276,7 +279,7 @@ export default function WorkOrderList() {
                                             <td className="p-2 align-middle text-muted-foreground">{wo.progetto || '-'}</td>
                                             <td className="p-2 align-middle">
                                                 <span className={cn(
-                                                    "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+                                                    "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold transition-colors",
                                                     wo.stato === 'New' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300' :
                                                         wo.stato === 'In Progress' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300' :
                                                             'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300'
@@ -284,12 +287,27 @@ export default function WorkOrderList() {
                                                     {wo.stato}
                                                 </span>
                                             </td>
+                                            <td className="p-2 align-middle">
+                                                <span className={cn(
+                                                    "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold transition-colors border",
+                                                    !wo.gestione || wo.gestione === 'Da Assegnare' ? "bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700" :
+                                                        wo.gestione === 'Da Pianificare' ? "bg-amber-50 text-amber-600 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800" :
+                                                            wo.gestione === 'Pianificato' ? "bg-sky-50 text-sky-600 border-sky-200 dark:bg-sky-900/20 dark:text-sky-400 dark:border-sky-800" :
+                                                                wo.gestione === 'In Corso' ? "bg-purple-50 text-purple-600 border-purple-200 dark:bg-purple-900/20 dark:text-purple-400 dark:border-purple-800" :
+                                                                    wo.gestione === 'Completato' ? "bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800" :
+                                                                        wo.gestione === 'Da Ripianificare' ? "bg-red-50 text-red-600 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800" :
+                                                                            "bg-slate-100 text-slate-600 border-slate-200"
+                                                )}>
+                                                    {wo.gestione || 'Da Assegnare'}
+                                                </span>
+                                            </td>
                                             <td className="p-2 align-middle font-mono text-[10px]">
                                                 {(() => {
                                                     if (!wo.pianificazioni?.length) return '-';
                                                     // Find earliest date
                                                     const dates = wo.pianificazioni
-                                                        .map(p => new Date(p.data_pianificazione).getTime())
+                                                        .filter(p => p.data_pianificazione)
+                                                        .map(p => new Date(p.data_pianificazione!).getTime())
                                                         .filter(t => !isNaN(t));
                                                     if (dates.length === 0) return '-';
                                                     const minDate = new Date(Math.min(...dates));

@@ -7,6 +7,7 @@ import WorkOrderList from './pages/work-orders/WorkOrderList'
 import ProjectsList from './pages/projects/ProjectsList'
 import ImportPage from './pages/import/ImportPage'
 import PriceListsPage from './pages/lists/PriceListsPage'
+import { SettingsPage } from './pages/settings/SettingsPage'
 
 function App() {
   return (
@@ -19,6 +20,7 @@ function App() {
           <Route path="/work-orders" element={<WorkOrderList />} />
           <Route path="/lists" element={<PriceListsPage />} />
           <Route path="/import" element={<ImportPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
           {/* Add Work Orders Route Later */}
         </Route>
         {/* Redirect unknown routes to dashboard */}

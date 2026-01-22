@@ -288,7 +288,10 @@ export function WorkOrderDetailModal({ workOrder, open, onOpenChange, onUpdate }
                                 <PlanningManager
                                     workOrderId={workOrder.work_order}
                                     status={workOrder.stato}
-                                    onUpdate={loadEconomics}
+                                    onUpdate={() => {
+                                        loadEconomics();
+                                        onUpdate();
+                                    }}
                                 />
                             </section>
 

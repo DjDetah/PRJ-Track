@@ -3,7 +3,11 @@ import { type Database } from '../types/supabase';
 import { priceListService } from './priceListService';
 
 export type WorkOrder = Database['public']['Tables']['work_orders']['Row'] & {
-    pianificazioni?: { data_pianificazione: string }[];
+    pianificazioni?: {
+        data_pianificazione: string | null;
+        esito: string | null;
+        motivazione_fallimento: string | null;
+    }[];
 };
 export type WorkOrderInsert = Database['public']['Tables']['work_orders']['Insert'];
 export type WorkOrderUpdate = Database['public']['Tables']['work_orders']['Update'];
@@ -13,7 +17,7 @@ export const workOrderService = {
     async getAll() {
         const { data, error } = await supabase
             .from('work_orders')
-            .select('*, pianificazioni(data_pianificazione)')
+            .select('*, pianificazioni(data_pianificazione, esito, motivazione_fallimento)')
             .order('system_created_at', { ascending: false });
 
         if (error) throw error;
@@ -106,11 +110,13 @@ export const workOrderService = {
 
     async addPianificazione(planning: {
         workOrderId: string;
-        date: string;
+        date?: string | null;
         noteImportanti?: string;
         noteChiusura?: string;
         fornitoreId?: string;
-        priceListId?: string; // New field
+        priceListId?: string;
+        esito?: 'IN CORSO' | 'OK' | 'NON OK'; // New field
+        motivazioneFallimento?: string; // New field
     }) {
         const { data, error } = await supabase
             .from('pianificazioni')
@@ -120,7 +126,9 @@ export const workOrderService = {
                 note_importanti: planning.noteImportanti,
                 note_chiusura: planning.noteChiusura,
                 fornitore_id: planning.fornitoreId,
-                price_list_id: planning.priceListId // New field
+                price_list_id: planning.priceListId,
+                esito: planning.esito, // Map validation
+                motivazione_fallimento: planning.motivazioneFallimento // Map validation
             })
             .select()
             .single();
@@ -130,11 +138,13 @@ export const workOrderService = {
     },
 
     async updatePianificazione(id: string, updates: {
-        date?: string;
+        date?: string | null;
         noteImportanti?: string;
         noteChiusura?: string;
         fornitoreId?: string;
-        priceListId?: string; // New field
+        priceListId?: string;
+        esito?: 'IN CORSO' | 'OK' | 'NON OK'; // New field
+        motivazioneFallimento?: string; // New field
     }) {
         const { data, error } = await supabase
             .from('pianificazioni')
@@ -143,7 +153,9 @@ export const workOrderService = {
                 note_importanti: updates.noteImportanti,
                 note_chiusura: updates.noteChiusura,
                 fornitore_id: updates.fornitoreId ?? null,
-                price_list_id: updates.priceListId ?? null // New field
+                price_list_id: updates.priceListId ?? null,
+                esito: updates.esito, // Map validation
+                motivazione_fallimento: updates.motivazioneFallimento // Map validation
             })
             .eq('id', id)
             .select()
@@ -200,7 +212,7 @@ export const workOrderService = {
         if (projectName === 'Senza Progetto') {
             const { data, error } = await supabase
                 .from('work_orders')
-                .select('*, pianificazioni(data_pianificazione)')
+                .select('*, pianificazioni(data_pianificazione, esito, motivazione_fallimento)')
                 .is('progetto', null)
                 .order('system_updated_at', { ascending: false });
 
@@ -210,7 +222,7 @@ export const workOrderService = {
 
         const { data, error } = await supabase
             .from('work_orders')
-            .select('*, pianificazioni(data_pianificazione)')
+            .select('*, pianificazioni(data_pianificazione, esito, motivazione_fallimento)')
             .eq('progetto', projectName)
             .order('system_updated_at', { ascending: false });
 

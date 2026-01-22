@@ -7,10 +7,11 @@ import {
     DialogTitle,
 } from '../../../components/ui/dialog';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
-import { Loader2, Calendar as CalendarIcon, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { Loader2, Calendar as CalendarIcon, ArrowUpDown, ArrowUp, ArrowDown, Timer, BarChart3, CheckCircle2, Gauge, TrendingUp, TrendingDown } from 'lucide-react';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { cn } from '../../../utils/cn';
+import { getWorkingDays } from '../../../utils/dateUtils';
 import { Button } from '../../../components/ui/button';
 
 import { economicsService } from '../../../services/economicsService';
@@ -83,9 +84,75 @@ export default function ProjectDetailModal({ projectName, open, onOpenChange }: 
 
     if (!open) return null;
 
-    // --- KPIs ---
+    // --- KPIs CALCULATION ---
     const totalWOs = workOrders.length;
     const totalPlannings = workOrders.reduce((acc, wo) => acc + (wo.pianificazioni?.length || 0), 0);
+
+    // 1. Performance SLA
+    let completedCount = 0;
+    let onTimeCount = 0;
+    let lateCount = 0;
+
+    // 2. Gestione Stats
+    const gestioneCounts: Record<string, number> = {};
+
+    // 3. Outcome Stats
+    const outcomeCounts: Record<string, number> = {};
+
+    workOrders.forEach(wo => {
+        // SLA Calculation
+        const s = (wo.stato || '').toLowerCase();
+        const isClosed = s.includes('chiuso') || s.includes('eseguito') || s.includes('terminato') || s.includes('close');
+        if (isClosed) {
+            completedCount++;
+            if (wo.chiuso && wo.fine_prevista) {
+                const closeDate = new Date(wo.chiuso);
+                const dueDate = new Date(wo.fine_prevista);
+                if (closeDate <= dueDate) onTimeCount++;
+                else lateCount++;
+            }
+        }
+
+        // Gestione
+        const gStatus = wo.gestione || 'Da Assegnare';
+        gestioneCounts[gStatus] = (gestioneCounts[gStatus] || 0) + 1;
+
+        // Outcomes
+        if (wo.pianificazioni) {
+            wo.pianificazioni.forEach(p => {
+                if (p.esito) {
+                    outcomeCounts[p.esito] = (outcomeCounts[p.esito] || 0) + 1;
+                }
+            });
+        }
+    });
+
+    const onTimePercentage = completedCount > 0 ? ((onTimeCount / completedCount) * 100).toFixed(1) : '0';
+
+    // Gestione - Top 3
+    const sortedGestione = Object.entries(gestioneCounts).sort((a, b) => b[1] - a[1]).slice(0, 3);
+
+    // Outcomes - OK Percentage
+    const totalOutcomes = Object.values(outcomeCounts).reduce((a, b) => a + b, 0);
+    const okOutcomes = outcomeCounts['OK'] || 0;
+    const okPercentage = totalOutcomes > 0 ? ((okOutcomes / totalOutcomes) * 100).toFixed(1) : '0';
+
+    // --- Pacing Custom Logic ---
+    // Count as "Complete" for Pacing if:
+    // 1. Status is closed (traditional)
+    // 2. OR has a positive outcome (Esito = OK) - effectively done but maybe not administratively closed
+    let pacingCompletedCount = 0;
+
+    workOrders.forEach(wo => {
+        const s = (wo.stato || '').toLowerCase();
+        const isClosed = s.includes('chiuso') || s.includes('eseguito') || s.includes('terminato') || s.includes('close');
+
+        const hasOkOutcome = wo.pianificazioni?.some(p => p.esito === 'OK');
+
+        if (isClosed || hasOkOutcome) {
+            pacingCompletedCount++;
+        }
+    });
 
     // --- Timeline Dates ---
     const startDates = workOrders
@@ -98,6 +165,37 @@ export default function ProjectDetailModal({ projectName, open, onOpenChange }: 
 
     const earliestStart = startDates.length > 0 ? new Date(Math.min(...startDates)) : null;
     const latestEnd = endDates.length > 0 ? new Date(Math.max(...endDates)) : null;
+
+    // --- Pacing Metric (Sopra/Sotto Soglia) ---
+    // Rule: Target = (Total WOs / Total Working Days) * Elapsed Working Days
+    let pacingMetric = {
+        target: 0,
+        actual: pacingCompletedCount,
+        total: workOrders.length,
+        status: 'N/A' as 'Sopra Soglia' | 'Sotto Soglia' | 'In Linea' | 'N/A',
+        delta: 0,
+        percentage: 0,
+        targetPercentage: 0
+    };
+
+    if (earliestStart && latestEnd && workOrders.length > 0) {
+        const totalWorkingDays = getWorkingDays(earliestStart, latestEnd);
+        const now = new Date();
+        // Cap elapsed days at total days if project is over
+        const effectiveEndDate = now > latestEnd ? latestEnd : now;
+        const elapsedWorkingDays = getWorkingDays(earliestStart, effectiveEndDate);
+
+        if (totalWorkingDays > 0) {
+            const dailyRate = workOrders.length / totalWorkingDays;
+            const target = dailyRate * elapsedWorkingDays;
+
+            pacingMetric.target = target;
+            pacingMetric.delta = pacingCompletedCount - target;
+            pacingMetric.status = pacingMetric.delta >= 0 ? 'Sopra Soglia' : 'Sotto Soglia';
+            pacingMetric.percentage = (pacingCompletedCount / workOrders.length) * 100;
+            pacingMetric.targetPercentage = (target / workOrders.length) * 100;
+        }
+    }
 
     const formatDate = (date: Date | null) => {
         if (!date) return 'N/D';
@@ -124,7 +222,76 @@ export default function ProjectDetailModal({ projectName, open, onOpenChange }: 
                     </div>
                 ) : (
                     <div className="flex-1 overflow-y-auto pr-2 space-y-6 pt-4">
-                        {/* Top Cards Section */}
+
+                        {/* Pacing Metric Card */}
+                        {pacingMetric.status !== 'N/A' && (
+                            <div className="grid grid-cols-1 gap-4">
+                                <Card className="bg-slate-50/50 dark:bg-slate-900/50 border-primary/20 shadow-sm hover:shadow-md transition-all">
+                                    <CardContent className="pt-6 pb-6">
+                                        <div className="flex flex-col gap-4">
+                                            <div className="flex justify-between items-center">
+                                                <div className="flex items-center gap-2">
+                                                    <div className="p-2 bg-primary/10 rounded-full">
+                                                        <Gauge className="h-5 w-5 text-primary" />
+                                                    </div>
+                                                    <div>
+                                                        <h3 className="font-semibold text-lg leading-none">Pacing Progetto</h3>
+                                                        <p className="text-xs text-muted-foreground mt-1">Avanzamento rispetto alla timeline lavorativa</p>
+                                                    </div>
+                                                </div>
+                                                <div className={cn("flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-full border",
+                                                    pacingMetric.delta >= 0
+                                                        ? "bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800"
+                                                        : "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800"
+                                                )}>
+                                                    {pacingMetric.delta >= 0 ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
+                                                    <span>{pacingMetric.status}</span>
+                                                    <span className="font-mono ml-1">({pacingMetric.delta >= 0 ? '+' : ''}{Math.round(pacingMetric.delta)})</span>
+                                                </div>
+                                            </div>
+
+                                            <div className="relative pt-6 pb-2 mx-2">
+                                                {/* Progress Bar Container */}
+                                                <div className="h-3 w-full bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden relative">
+                                                    {/* Actual Progress */}
+                                                    <div
+                                                        className={cn("h-full transition-all duration-700 ease-out rounded-full", pacingMetric.delta >= 0 ? "bg-primary" : "bg-amber-500")}
+                                                        style={{ width: `${Math.min(100, pacingMetric.percentage)}%` }}
+                                                    />
+                                                </div>
+
+                                                {/* Target Marker */}
+                                                <div
+                                                    className="absolute top-0 flex flex-col items-center transition-all duration-500 z-10 group cursor-help"
+                                                    style={{ left: `${Math.min(100, pacingMetric.targetPercentage)}%`, transform: 'translateX(-50%)' }}
+                                                    title={`Target atteso: ${pacingMetric.target.toFixed(1)}`}
+                                                >
+                                                    <div className="h-9 w-0.5 bg-slate-800 dark:bg-slate-200 dashed border-l-[1.5px] border-dashed opacity-60 group-hover:opacity-100 transition-opacity"></div>
+                                                    <span className="text-[9px] font-mono font-bold bg-slate-800 text-white px-1.5 py-0.5 rounded shadow-sm mt-0.5 opacity-80 group-hover:opacity-100 transition-opacity">TARGET</span>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex justify-between text-xs text-muted-foreground font-mono px-1">
+                                                <div className="flex flex-col">
+                                                    <span className="text-[10px] uppercase tracking-wider">Completati</span>
+                                                    <span className="font-bold text-sm text-foreground">{pacingMetric.actual}</span>
+                                                </div>
+                                                <div className="flex flex-col items-center">
+                                                    <span className="text-[10px] uppercase tracking-wider">Target Ad Oggi</span>
+                                                    <span className="font-bold text-sm text-foreground">{pacingMetric.target.toFixed(1)}</span>
+                                                </div>
+                                                <div className="flex flex-col items-end">
+                                                    <span className="text-[10px] uppercase tracking-wider">Totale</span>
+                                                    <span className="font-bold text-sm text-foreground">{pacingMetric.total}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            </div>
+                        )}
+
+                        {/* Row 1: KPI Cards */}
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             {/* KPI Card: Efficiency */}
                             <Card>
@@ -152,38 +319,30 @@ export default function ProjectDetailModal({ projectName, open, onOpenChange }: 
                             {/* KPI Card: Economics */}
                             <Card>
                                 <CardHeader className="pb-2">
-                                    <CardTitle className="text-sm font-medium text-muted-foreground">Contabilità di Progetto</CardTitle>
+                                    <CardTitle className="text-sm font-medium text-muted-foreground">Contabilità</CardTitle>
                                 </CardHeader>
                                 <CardContent>
                                     <div className="space-y-3">
                                         <div className="flex justify-between items-center text-sm">
-                                            <span className="text-muted-foreground">Budget (Prev.)</span>
+                                            <span className="text-muted-foreground">Budget</span>
                                             <span className="font-mono font-bold">€ {economics.budget.toFixed(2)}</span>
                                         </div>
                                         <div className="flex justify-between items-center text-sm">
-                                            <span className="text-muted-foreground">Effettivo (Ricavi)</span>
+                                            <span className="text-muted-foreground">Effettivo</span>
                                             <span className="font-mono font-bold text-blue-600 dark:text-blue-400">€ {economics.actual.toFixed(2)}</span>
-                                        </div>
-                                        <div className="flex justify-between items-center text-sm border-t border-slate-100 dark:border-slate-800 pt-2">
-                                            <span className="text-muted-foreground">Costi (Fornitori)</span>
-                                            <span className="font-mono font-bold text-slate-700 dark:text-slate-300">€ {economics.cost.toFixed(2)}</span>
                                         </div>
 
                                         <div className="grid grid-cols-2 gap-2 pt-2">
                                             <div className="bg-slate-50 dark:bg-slate-900 p-2 rounded text-center">
                                                 <div className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold">Scostamento</div>
                                                 <div className={cn("text-xs font-mono font-bold", (economics.actual - economics.budget) >= 0 ? "text-green-600" : "text-red-600")}>
-                                                    {economics.actual - economics.budget >= 0 ? '+' : ''}€ {(economics.actual - economics.budget).toFixed(2)}
-                                                    <span className="ml-1 opacity-80">
-                                                        ({economics.actual - economics.budget >= 0 ? '+' : ''}{((economics.actual - economics.budget) / (economics.budget || 1) * 100).toFixed(1)}%)
-                                                    </span>
+                                                    {(economics.actual - economics.budget).toFixed(0)}€
                                                 </div>
                                             </div>
                                             <div className="bg-slate-50 dark:bg-slate-900 p-2 rounded text-center">
-                                                <div className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold">Margine (GP%)</div>
+                                                <div className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold">Margine</div>
                                                 <div className={cn("text-xs font-mono font-bold",
-                                                    economics.actual > 0 && ((economics.actual - economics.cost) / economics.actual) > 0.2 ? "text-green-600" :
-                                                        economics.actual > 0 && ((economics.actual - economics.cost) / economics.actual) > 0 ? "text-amber-600" : "text-red-600"
+                                                    economics.actual > 0 && ((economics.actual - economics.cost) / economics.actual) > 0.2 ? "text-green-600" : "text-amber-600"
                                                 )}>
                                                     {economics.actual > 0 ? ((economics.actual - economics.cost) / economics.actual * 100).toFixed(1) : 0}%
                                                 </div>
@@ -196,14 +355,11 @@ export default function ProjectDetailModal({ projectName, open, onOpenChange }: 
                             {/* Timeline Card */}
                             <Card>
                                 <CardHeader className="pb-2">
-                                    <CardTitle className="text-sm font-medium text-muted-foreground">Timeline di Progetto</CardTitle>
+                                    <CardTitle className="text-sm font-medium text-muted-foreground">Timeline</CardTitle>
                                 </CardHeader>
                                 <CardContent className="flex flex-col justify-center h-full min-h-[140px]">
                                     <div className="flex items-center justify-between relative">
-                                        {/* Connecting Line */}
                                         <div className="absolute top-1/2 left-0 w-full h-1 bg-slate-100 dark:bg-slate-800 -z-10 rounded-full"></div>
-
-                                        {/* Start Point */}
                                         <div className="flex flex-col items-start bg-white dark:bg-slate-950 pr-4">
                                             <div className="flex items-center gap-2 mb-1">
                                                 <div className="p-1.5 bg-green-100 dark:bg-green-900/30 rounded-full">
@@ -211,12 +367,8 @@ export default function ProjectDetailModal({ projectName, open, onOpenChange }: 
                                                 </div>
                                                 <span className="text-xs font-semibold uppercase text-green-600 dark:text-green-400">Inizio</span>
                                             </div>
-                                            <span className="text-lg font-bold">
-                                                {formatDate(earliestStart)}
-                                            </span>
+                                            <span className="text-sm font-bold">{formatDate(earliestStart)}</span>
                                         </div>
-
-                                        {/* End Point */}
                                         <div className="flex flex-col items-end bg-white dark:bg-slate-950 pl-4">
                                             <div className="flex items-center gap-2 mb-1">
                                                 <span className="text-xs font-semibold uppercase text-red-500 dark:text-red-400">Fine</span>
@@ -224,13 +376,109 @@ export default function ProjectDetailModal({ projectName, open, onOpenChange }: 
                                                     <CalendarIcon className="h-4 w-4 text-red-500 dark:text-red-400" />
                                                 </div>
                                             </div>
-                                            <span className="text-lg font-bold">
-                                                {formatDate(latestEnd)}
-                                            </span>
+                                            <span className="text-sm font-bold">{formatDate(latestEnd)}</span>
                                         </div>
                                     </div>
                                 </CardContent>
                             </Card>
+                        </div>
+
+                        {/* Row 2: Analysis Cards (NEW) */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+
+                            {/* Performance SLA */}
+                            <Card className="shadow-sm border-slate-200/50">
+                                <CardHeader className="pb-2 flex flex-row items-center justify-between space-y-0">
+                                    <CardTitle className="text-sm font-medium text-muted-foreground">Performance SLA</CardTitle>
+                                    <Timer className="h-4 w-4 text-muted-foreground" />
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="flex flex-col">
+                                        <span className="text-2xl font-bold">{onTimePercentage}%</span>
+                                        <span className="text-xs text-muted-foreground mb-4">Puntualità interventi</span>
+
+                                        <div className="space-y-2">
+                                            <div className="flex justify-between text-xs">
+                                                <span className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full bg-green-500"></div>In Orario</span>
+                                                <span className="font-mono font-medium">{onTimeCount}</span>
+                                            </div>
+                                            <div className="flex justify-between text-xs">
+                                                <span className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full bg-red-500"></div>In Ritardo</span>
+                                                <span className="font-mono font-medium">{lateCount}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </CardContent>
+                            </Card>
+
+                            {/* Stato Gestione */}
+                            <Card className="shadow-sm border-slate-200/50">
+                                <CardHeader className="pb-2 flex flex-row items-center justify-between space-y-0">
+                                    <CardTitle className="text-sm font-medium text-muted-foreground">Stato Gestione</CardTitle>
+                                    <BarChart3 className="h-4 w-4 text-muted-foreground" />
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="space-y-3 mt-1">
+                                        {sortedGestione.length > 0 ? (
+                                            sortedGestione.map(([status, count]) => (
+                                                <div key={status} className="flex flex-col gap-1">
+                                                    <div className="flex justify-between text-xs">
+                                                        <span className="font-medium">{status}</span>
+                                                        <span className="text-muted-foreground">{count}</span>
+                                                    </div>
+                                                    <div className="h-1.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                                                        <div
+                                                            className={cn("h-full rounded-full",
+                                                                status === 'Completato' ? 'bg-emerald-500' :
+                                                                    status === 'In Corso' ? 'bg-violet-500' :
+                                                                        status === 'Da Pianificare' ? 'bg-amber-500' :
+                                                                            'bg-blue-400'
+                                                            )}
+                                                            style={{ width: `${(count / totalWOs) * 100}%` }}
+                                                        ></div>
+                                                    </div>
+                                                </div>
+                                            ))
+                                        ) : (
+                                            <div className="text-xs text-muted-foreground text-center py-4">Nessun dato disponibile</div>
+                                        )}
+                                    </div>
+                                </CardContent>
+                            </Card>
+
+                            {/* Esiti Interventi */}
+                            <Card className="shadow-sm border-slate-200/50">
+                                <CardHeader className="pb-2 flex flex-row items-center justify-between space-y-0">
+                                    <CardTitle className="text-sm font-medium text-muted-foreground">Esiti Interventi</CardTitle>
+                                    <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="flex items-center gap-4">
+                                        <div className="relative flex items-center justify-center w-16 h-16">
+                                            <svg className="w-full h-full transform -rotate-90">
+                                                <circle cx="32" cy="32" r="28" stroke="currentColor" strokeWidth="6" fill="transparent" className="text-slate-100 dark:text-slate-800" />
+                                                <circle cx="32" cy="32" r="28" stroke="currentColor" strokeWidth="6" fill="transparent"
+                                                    strokeDasharray={175.92}
+                                                    strokeDashoffset={175.92 - (175.92 * Number(okPercentage)) / 100}
+                                                    className="text-green-500 transition-all duration-1000 ease-out"
+                                                />
+                                            </svg>
+                                            <span className="absolute text-xs font-bold">{Number(okPercentage).toFixed(0)}%</span>
+                                        </div>
+                                        <div className="flex-1 space-y-2">
+                                            <div className="flex justify-between text-xs border-b border-slate-100 dark:border-slate-800 pb-1">
+                                                <span className="text-muted-foreground">Successo (OK)</span>
+                                                <span className="font-bold text-green-600">{okOutcomes}</span>
+                                            </div>
+                                            <div className="flex justify-between text-xs">
+                                                <span className="text-muted-foreground">Totale Esiti</span>
+                                                <span className="font-bold">{totalOutcomes}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </CardContent>
+                            </Card>
+
                         </div>
 
                         {/* Work Orders Table */}
@@ -290,7 +538,7 @@ export default function ProjectDetailModal({ projectName, open, onOpenChange }: 
                                                     {(() => {
                                                         if (!wo.pianificazioni?.length) return '-';
                                                         const dates = wo.pianificazioni
-                                                            .map(p => new Date(p.data_pianificazione).getTime())
+                                                            .map(p => p.data_pianificazione ? new Date(p.data_pianificazione).getTime() : NaN)
                                                             .filter(t => !isNaN(t));
                                                         if (dates.length === 0) return '-';
                                                         const minDate = new Date(Math.min(...dates));

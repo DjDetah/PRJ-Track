@@ -230,10 +230,11 @@ export interface Database {
                 Row: {
                     id: string
                     work_order_id: string
-                    data_pianificazione: string
+                    data_pianificazione: string | null
                     note_importanti: string | null
                     note_chiusura: string | null
-                    esito: 'OK' | 'NON OK' | null
+                    esito: 'IN CORSO' | 'OK' | 'NON OK' | null
+                    motivazione_fallimento: string | null
                     fornitore_id: string | null
                     price_list_id: string | null
                     created_at: string | null
@@ -241,10 +242,11 @@ export interface Database {
                 Insert: {
                     id?: string
                     work_order_id: string
-                    data_pianificazione: string
+                    data_pianificazione?: string | null
                     note_importanti?: string | null
                     note_chiusura?: string | null
-                    esito?: 'OK' | 'NON OK' | null
+                    esito?: 'IN CORSO' | 'OK' | 'NON OK' | null
+                    motivazione_fallimento?: string | null
                     fornitore_id?: string | null
                     price_list_id?: string | null
                     created_at?: string | null
@@ -252,13 +254,34 @@ export interface Database {
                 Update: {
                     id?: string
                     work_order_id?: string
-                    data_pianificazione?: string
+                    data_pianificazione?: string | null
                     note_importanti?: string | null
                     note_chiusura?: string | null
-                    esito?: 'OK' | 'NON OK' | null
+                    esito?: 'IN CORSO' | 'OK' | 'NON OK' | null
+                    motivazione_fallimento?: string | null
                     fornitore_id?: string | null
                     price_list_id?: string | null
                     created_at?: string | null
+                }
+            }
+            planning_failure_reasons: {
+                Row: {
+                    id: string
+                    reason: string
+                    is_active: boolean
+                    created_at: string
+                }
+                Insert: {
+                    id?: string
+                    reason: string
+                    is_active?: boolean
+                    created_at?: string
+                }
+                Update: {
+                    id?: string
+                    reason?: string
+                    is_active?: boolean
+                    created_at?: string
                 }
             }
             work_orders: {
@@ -286,6 +309,7 @@ export interface Database {
                     system_updated_at: string | null
                     price_list_id: string | null
                     notes: string | null
+                    gestione: string | null
                 }
                 Insert: {
                     work_order: string
@@ -311,6 +335,7 @@ export interface Database {
                     system_updated_at?: string | null
                     price_list_id?: string | null
                     notes?: string | null
+                    gestione?: string | null
 
                 }
                 Update: {
@@ -337,6 +362,7 @@ export interface Database {
                     system_updated_at?: string | null
                     price_list_id?: string | null
                     notes?: string | null
+                    gestione?: string | null
                 }
             }
         }

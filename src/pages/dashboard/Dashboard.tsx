@@ -4,6 +4,9 @@ import { KPIGrid } from './components/KPIGrid';
 import { StatusChart } from './components/StatusChart';
 import { ProjectTable } from './components/ProjectTable';
 import { PerformanceChart } from './components/PerformanceChart';
+import { GestioneChart } from './components/GestioneChart'; // NEW
+import { OutcomesChart } from './components/OutcomesChart'; // NEW
+import { FailureReasonsTable } from './components/FailureReasonsTable';
 import { Loader2 } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '../../components/ui/alert';
 
@@ -52,23 +55,23 @@ export default function Dashboard() {
     };
 
     // 1. Data for KPI Grid & Charts (Filtered by BOTH Project & Category)
-    //    Actually, if I click a Project, I want KPIs to show THAT Project's stats. 
-    //    If I click a Category, I want Charts to focus on that.
-    //    But user said: "cliccando sul progetto non voglio che spariscano tutti gli altri".
-    //    This logic mainly applies to the Project Table visibility.
-    //    For KPIs/Charts, it usually makes sense to drill down.
     const kpiData = rawData.filter(wo => matchesProject(wo, selectedProject) && matchesCategory(wo, selectedCategory));
 
     // 2. Data for Project Table (Filtered by Category ONLY, to keep all projects visible but count only relevant items)
-    //    User: "cliccando su un progetto verrà evidenziato e gli altri grafici e card filtrati"
-    //    So the Project Table *List* should stay strictly based on Category filter (or global).
     const tableData = rawData.filter(wo => matchesCategory(wo, selectedCategory));
 
-    // Calculate Metrics
     // Calculate Metrics
     const calculateStats = (data: WorkOrder[], allStatusesReference: string[] = []) => {
         const statusCounts: Record<string, number> = {};
         const projectCounts: Record<string, { count: number; overdue: number }> = {};
+
+        // NEW: Gestione Counts
+        const gestioneCounts: Record<string, number> = {};
+        // NEW: Outcome Counts
+        // NEW: Outcome Counts
+        const outcomeCounts: Record<string, number> = {};
+        // NEW: Failure Reasons
+        const failureReasonCounts: Record<string, number> = {};
 
         let completedCount = 0;
         let overdueCount = 0;
@@ -83,6 +86,7 @@ export default function Dashboard() {
         data.forEach(wo => {
             const valStatus = wo.stato || 'Unknown';
             const valProject = wo.progetto || 'N/A';
+            const valGestione = wo.gestione || 'Da Assegnare';
 
             // Initialize project stats if new
             if (!projectCounts[valProject]) {
@@ -91,6 +95,21 @@ export default function Dashboard() {
 
             statusCounts[valStatus] = (statusCounts[valStatus] || 0) + 1;
             projectCounts[valProject].count += 1;
+
+            // Track Gestione
+            gestioneCounts[valGestione] = (gestioneCounts[valGestione] || 0) + 1;
+
+            // Track Outcomes (Outcomes are nested in plannings)
+            if (wo.pianificazioni) {
+                wo.pianificazioni.forEach(p => {
+                    if (p.esito) {
+                        outcomeCounts[p.esito] = (outcomeCounts[p.esito] || 0) + 1;
+                        if (p.esito === 'NON OK' && p.motivazione_fallimento) {
+                            failureReasonCounts[p.motivazione_fallimento] = (failureReasonCounts[p.motivazione_fallimento] || 0) + 1;
+                        }
+                    }
+                });
+            }
 
             const s = valStatus.toLowerCase();
             const isClosed = s.includes('chiuso') || s.includes('eseguito') || s.includes('terminato') || s.includes('close');
@@ -132,8 +151,18 @@ export default function Dashboard() {
                 name,
                 count: stats.count,
                 overdue: stats.overdue,
-                percentage: (stats.count / data.length) * 100
+                percentage: data.length > 0 ? (stats.count / data.length) * 100 : 0
             })),
+            // NEW Returns
+            gestioneDistribution: Object.entries(gestioneCounts).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
+            outcomeDistribution: Object.entries(outcomeCounts).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
+            failureReasonDistribution: Object.entries(failureReasonCounts)
+                .map(([reason, count]) => ({
+                    reason,
+                    count,
+                    percentage: outcomeCounts['NON OK'] > 0 ? (count / outcomeCounts['NON OK']) * 100 : 0
+                }))
+                .sort((a, b) => b.count - a.count),
         };
     };
 
@@ -141,7 +170,6 @@ export default function Dashboard() {
     const globalUniqueStatuses = Array.from(new Set(rawData.map(wo => wo.stato || 'Unknown'))).filter(s => s !== 'Unknown');
 
     // Stats for the Visualization (Charts + KPIs)
-    // We pass globalUniqueStatuses so that even if a status has 0 items in selected project, it appears in calculations
     const viewStats = calculateStats(kpiData, globalUniqueStatuses);
 
     // Stats for the Project Table Structure (Just using the Project breakdown mostly)
@@ -196,16 +224,28 @@ export default function Dashboard() {
 
                 {/* Left Column (Charts) */}
                 <div className="flex flex-col gap-4">
-                    {/* Filter data for charts by Category too, so they reflect what's clicked */}
-                    {/* Wait, if I click 'New', Pie Chart will show 100% New. That's usually expected in cross-filter. 
-                 Or should Pie Chart keep showing distribution? "i dati di tutti i grafici vengano filtrati". 
-                 So yes, Pie Chart will collapse to single slice. */}
-                    <StatusChart data={
-                        selectedCategory && selectedCategory !== 'OVERDUE' && selectedCategory !== 'TOTAL'
-                            ? viewStats.statusDistribution.filter(s => s.name === selectedCategory)
-                            : viewStats.statusDistribution
-                    } />
-                    <PerformanceChart onTime={viewStats.onTime} late={viewStats.late} totalClosed={viewStats.completed} />
+
+                    {/* Row 1: Status & Performance */}
+                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                        <StatusChart data={
+                            selectedCategory && selectedCategory !== 'OVERDUE' && selectedCategory !== 'TOTAL'
+                                ? viewStats.statusDistribution.filter(s => s.name === selectedCategory)
+                                : viewStats.statusDistribution
+                        } />
+                        <PerformanceChart onTime={viewStats.onTime} late={viewStats.late} totalClosed={viewStats.completed} />
+                    </div>
+
+                    {/* Row 2: Gestione & Outcomes (NEW) */}
+                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                        <GestioneChart data={viewStats.gestioneDistribution} />
+                        <OutcomesChart data={viewStats.outcomeDistribution} />
+                    </div>
+
+                    {/* NEW: Failure Reasons Table */}
+                    <div className="grid grid-cols-1 gap-4">
+                        <FailureReasonsTable data={viewStats.failureReasonDistribution} />
+                    </div>
+
                 </div>
 
                 {/* Right Column (Projects) */}
