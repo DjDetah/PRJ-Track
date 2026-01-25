@@ -1,5 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../../components/ui/card';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { BarChart, Legend } from '@tremor/react';
 
 interface PerformanceChartProps {
     onTime: number;
@@ -7,10 +7,16 @@ interface PerformanceChartProps {
     totalClosed: number;
 }
 
+const valueFormatter = (number: number) => number.toString();
+
 export function PerformanceChart({ onTime, late, totalClosed }: PerformanceChartProps) {
+    // Restructure for multi-color series
     const data = [
-        { name: 'In Orario', value: onTime, color: '#22c55e' }, // Green
-        { name: 'In Ritardo', value: late, color: '#ef4444' },  // Red
+        {
+            name: 'Stato',
+            'In Orario': onTime,
+            'In Ritardo': late,
+        },
     ];
 
     const percentageOnTime = totalClosed > 0 ? ((onTime / totalClosed) * 100).toFixed(1) : 0;
@@ -23,33 +29,24 @@ export function PerformanceChart({ onTime, late, totalClosed }: PerformanceChart
                     Tasso di puntualità: <span className="font-bold text-primary">{percentageOnTime}%</span>
                 </CardDescription>
             </CardHeader>
-            <CardContent className="h-[300px]">
-                <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={data}>
-                        <defs>
-                            <linearGradient id="grad-green" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="0%" stopColor="#22c55e" stopOpacity={1} />
-                                <stop offset="95%" stopColor="#22c55e" stopOpacity={0.6} />
-                            </linearGradient>
-                            <linearGradient id="grad-red" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="0%" stopColor="#ef4444" stopOpacity={1} />
-                                <stop offset="95%" stopColor="#ef4444" stopOpacity={0.6} />
-                            </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" opacity={0.3} vertical={false} />
-                        <XAxis dataKey="name" tickLine={false} axisLine={false} dy={10} />
-                        <YAxis tickLine={false} axisLine={false} dx={-10} />
-                        <Tooltip
-                            cursor={{ fill: 'transparent' }}
-                            contentStyle={{ backgroundColor: 'rgba(255, 255, 255, 0.9)', borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                        />
-                        <Bar dataKey="value" radius={[4, 4, 0, 0]}>
-                            {data.map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={entry.color === '#22c55e' ? 'url(#grad-green)' : 'url(#grad-red)'} />
-                            ))}
-                        </Bar>
-                    </BarChart>
-                </ResponsiveContainer>
+            <CardContent className="h-[300px] flex flex-col items-center justify-center p-2">
+                <BarChart
+                    className="mt-2 flex-1 w-full"
+                    data={data}
+                    index="name"
+                    categories={['In Orario', 'In Ritardo']}
+                    colors={['emerald', 'rose']}
+                    valueFormatter={valueFormatter}
+                    yAxisWidth={48}
+                    showLegend={false}
+                />
+                <div className="mt-2 w-full flex justify-center scale-75">
+                    <Legend
+                        categories={['In Orario', 'In Ritardo']}
+                        colors={['emerald', 'rose']}
+                        className="max-w-full justify-center"
+                    />
+                </div>
             </CardContent>
         </Card>
     );

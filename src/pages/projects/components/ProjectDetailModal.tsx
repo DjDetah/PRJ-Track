@@ -6,8 +6,9 @@ import {
     DialogHeader,
     DialogTitle,
 } from '../../../components/ui/dialog';
+import { Card as TremorCard, Badge, Text, Metric, Flex, Grid, Title, Icon, DonutChart, BarList, CategoryBar, Legend } from '@tremor/react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
-import { Loader2, Calendar as CalendarIcon, ArrowUpDown, ArrowUp, ArrowDown, Timer, BarChart3, CheckCircle2, Gauge, TrendingUp, TrendingDown } from 'lucide-react';
+import { Loader2, Calendar as CalendarIcon, ArrowUpDown, ArrowUp, ArrowDown, Timer, BarChart3, CheckCircle2, TrendingUp, TrendingDown, Activity, FileSpreadsheet } from 'lucide-react';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { cn } from '../../../utils/cn';
@@ -62,6 +63,24 @@ export default function ProjectDetailModal({ projectName, open, onOpenChange }: 
             direction = 'desc';
         }
         setSortConfig({ key, direction });
+    };
+
+    const handleExportExcel = async () => {
+        const xlsx = await import('xlsx');
+        const rows = sortedWorkOrders.map(wo => ({
+            'WO ID': wo.work_order,
+            'Stato': wo.stato,
+            'Pianificato': wo.pianificazioni?.map(p => p.data_pianificazione ? format(new Date(p.data_pianificazione), 'dd/MM/yyyy HH:mm') : '').join(', ') || '-',
+            'Città': wo.citta,
+            'Avvio Prog.': wo.avvio_programmato ? format(new Date(wo.avvio_programmato), 'dd/MM/yyyy') : '-',
+            'Fine Prev.': wo.fine_prevista ? format(new Date(wo.fine_prevista), 'dd/MM/yyyy') : '-',
+            'Descrizione': wo.descrizione
+        }));
+
+        const worksheet = xlsx.utils.json_to_sheet(rows);
+        const workbook = xlsx.utils.book_new();
+        xlsx.utils.book_append_sheet(workbook, worksheet, "Work Orders");
+        xlsx.writeFile(workbook, `${projectName || 'Project'}_WorkOrders.xlsx`);
     };
 
     const sortedWorkOrders = [...workOrders].sort((a, b) => {
@@ -131,11 +150,11 @@ export default function ProjectDetailModal({ projectName, open, onOpenChange }: 
 
     // Gestione - Top 3
     const sortedGestione = Object.entries(gestioneCounts).sort((a, b) => b[1] - a[1]).slice(0, 3);
+    const gestioneData = sortedGestione.map(([name, value]) => ({ name, value }));
 
-    // Outcomes - OK Percentage
-    const totalOutcomes = Object.values(outcomeCounts).reduce((a, b) => a + b, 0);
-    const okOutcomes = outcomeCounts['OK'] || 0;
-    const okPercentage = totalOutcomes > 0 ? ((okOutcomes / totalOutcomes) * 100).toFixed(1) : '0';
+    // Outcomes - OK Percentage removed
+
+    const outcomeData = Object.entries(outcomeCounts).map(([name, value]) => ({ name, value }));
 
     // --- Pacing Custom Logic ---
     // Count as "Complete" for Pacing if:
@@ -213,6 +232,11 @@ export default function ProjectDetailModal({ projectName, open, onOpenChange }: 
                                 Dettaglio Progetto
                             </span>
                         </div>
+                        <div className="flex items-center gap-2">
+                            <Button variant="outline" size="icon" onClick={handleExportExcel} title="Esporta Tabella (Excel)">
+                                <FileSpreadsheet className="h-4 w-4" />
+                            </Button>
+                        </div>
                     </DialogTitle>
                 </DialogHeader>
 
@@ -223,72 +247,68 @@ export default function ProjectDetailModal({ projectName, open, onOpenChange }: 
                 ) : (
                     <div className="flex-1 overflow-y-auto pr-2 space-y-6 pt-4">
 
-                        {/* Pacing Metric Card */}
+                        {/* Pacing Metric Card - Tremor Style */}
                         {pacingMetric.status !== 'N/A' && (
-                            <div className="grid grid-cols-1 gap-4">
-                                <Card className="bg-slate-50/50 dark:bg-slate-900/50 border-primary/20 shadow-sm hover:shadow-md transition-all">
-                                    <CardContent className="pt-6 pb-6">
-                                        <div className="flex flex-col gap-4">
-                                            <div className="flex justify-between items-center">
-                                                <div className="flex items-center gap-2">
-                                                    <div className="p-2 bg-primary/10 rounded-full">
-                                                        <Gauge className="h-5 w-5 text-primary" />
-                                                    </div>
-                                                    <div>
-                                                        <h3 className="font-semibold text-lg leading-none">Pacing Progetto</h3>
-                                                        <p className="text-xs text-muted-foreground mt-1">Avanzamento rispetto alla timeline lavorativa</p>
-                                                    </div>
-                                                </div>
-                                                <div className={cn("flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-full border",
-                                                    pacingMetric.delta >= 0
-                                                        ? "bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800"
-                                                        : "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800"
-                                                )}>
-                                                    {pacingMetric.delta >= 0 ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
-                                                    <span>{pacingMetric.status}</span>
-                                                    <span className="font-mono ml-1">({pacingMetric.delta >= 0 ? '+' : ''}{Math.round(pacingMetric.delta)})</span>
-                                                </div>
-                                            </div>
-
-                                            <div className="relative pt-6 pb-2 mx-2">
-                                                {/* Progress Bar Container */}
-                                                <div className="h-3 w-full bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden relative">
-                                                    {/* Actual Progress */}
-                                                    <div
-                                                        className={cn("h-full transition-all duration-700 ease-out rounded-full", pacingMetric.delta >= 0 ? "bg-primary" : "bg-amber-500")}
-                                                        style={{ width: `${Math.min(100, pacingMetric.percentage)}%` }}
-                                                    />
-                                                </div>
-
-                                                {/* Target Marker */}
-                                                <div
-                                                    className="absolute top-0 flex flex-col items-center transition-all duration-500 z-10 group cursor-help"
-                                                    style={{ left: `${Math.min(100, pacingMetric.targetPercentage)}%`, transform: 'translateX(-50%)' }}
-                                                    title={`Target atteso: ${pacingMetric.target.toFixed(1)}`}
-                                                >
-                                                    <div className="h-9 w-0.5 bg-slate-800 dark:bg-slate-200 dashed border-l-[1.5px] border-dashed opacity-60 group-hover:opacity-100 transition-opacity"></div>
-                                                    <span className="text-[9px] font-mono font-bold bg-slate-800 text-white px-1.5 py-0.5 rounded shadow-sm mt-0.5 opacity-80 group-hover:opacity-100 transition-opacity">TARGET</span>
-                                                </div>
-                                            </div>
-
-                                            <div className="flex justify-between text-xs text-muted-foreground font-mono px-1">
-                                                <div className="flex flex-col">
-                                                    <span className="text-[10px] uppercase tracking-wider">Completati</span>
-                                                    <span className="font-bold text-sm text-foreground">{pacingMetric.actual}</span>
-                                                </div>
-                                                <div className="flex flex-col items-center">
-                                                    <span className="text-[10px] uppercase tracking-wider">Target Ad Oggi</span>
-                                                    <span className="font-bold text-sm text-foreground">{pacingMetric.target.toFixed(1)}</span>
-                                                </div>
-                                                <div className="flex flex-col items-end">
-                                                    <span className="text-[10px] uppercase tracking-wider">Totale</span>
-                                                    <span className="font-bold text-sm text-foreground">{pacingMetric.total}</span>
-                                                </div>
-                                            </div>
+                            <TremorCard className="ring-0 shadow-lg shadow-slate-200/50 dark:shadow-none border border-slate-200/60 p-6">
+                                <Flex alignItems="start">
+                                    <div className="flex items-center gap-3">
+                                        <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                                            <Activity className="h-6 w-6 text-blue-500" />
                                         </div>
-                                    </CardContent>
-                                </Card>
-                            </div>
+                                        <div>
+                                            <Title>Stato Lavori</Title>
+                                            <Text>Avanzamento rispetto alla timeline lavorativa</Text>
+                                        </div>
+                                    </div>
+                                    <Badge
+                                        size="lg"
+                                        color={pacingMetric.delta >= 0 ? 'emerald' : 'rose'}
+                                        icon={pacingMetric.delta >= 0 ? TrendingUp : TrendingDown}
+                                    >
+                                        {pacingMetric.status} ({pacingMetric.delta >= 0 ? '+' : ''}{Math.round(pacingMetric.delta)})
+                                    </Badge>
+                                </Flex>
+
+                                <div className="mt-8 mb-6 relative px-2">
+                                    {/* Custom Progress Bar with Target Marker */}
+                                    <div className="h-4 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden relative">
+                                        {/* Actual Progress */}
+                                        <div
+                                            className={cn("h-full transition-all duration-700 ease-out rounded-full",
+                                                pacingMetric.delta >= 0 ? "bg-emerald-500" : "bg-rose-500"
+                                            )}
+                                            style={{ width: `${Math.min(100, pacingMetric.percentage)}%` }}
+                                        />
+                                    </div>
+
+                                    {/* Target Marker Overlay */}
+                                    <div
+                                        className="absolute top-[-4px] flex flex-col items-center transition-all duration-500 z-10 group cursor-help"
+                                        style={{ left: `${Math.min(100, pacingMetric.targetPercentage)}%`, transform: 'translateX(-50%)' }}
+                                        title={`Target atteso: ${pacingMetric.target.toFixed(1)}`}
+                                    >
+                                        <div className="h-6 w-0.5 bg-slate-800 dark:bg-slate-200 dashed border-l-[1.5px] border-dashed opacity-60 group-hover:opacity-100 transition-opacity"></div>
+                                        <span className="text-[10px] font-mono font-bold bg-slate-800 text-white px-1.5 py-0.5 rounded shadow-sm mt-0.5 opacity-80 group-hover:opacity-100 transition-opacity">
+                                            TARGET
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <Grid numItems={3} className="gap-4 divide-x divide-slate-100 dark:divide-slate-800">
+                                    <div className="px-2">
+                                        <Text className="uppercase tracking-wider text-[10px]">Completati</Text>
+                                        <Metric>{pacingMetric.actual}</Metric>
+                                    </div>
+                                    <div className="px-2 text-center">
+                                        <Text className="uppercase tracking-wider text-[10px]">Target Ad Oggi</Text>
+                                        <Metric>{pacingMetric.target.toFixed(1)}</Metric>
+                                    </div>
+                                    <div className="px-2 text-right">
+                                        <Text className="uppercase tracking-wider text-[10px]">Totale</Text>
+                                        <Metric>{pacingMetric.total}</Metric>
+                                    </div>
+                                </Grid>
+                            </TremorCard>
                         )}
 
                         {/* Row 1: KPI Cards */}
@@ -384,102 +404,92 @@ export default function ProjectDetailModal({ projectName, open, onOpenChange }: 
                         </div>
 
                         {/* Row 2: Analysis Cards (NEW) */}
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <Grid numItemsMd={3} className="gap-4">
 
                             {/* Performance SLA */}
-                            <Card className="shadow-sm border-slate-200/50">
-                                <CardHeader className="pb-2 flex flex-row items-center justify-between space-y-0">
-                                    <CardTitle className="text-sm font-medium text-muted-foreground">Performance SLA</CardTitle>
-                                    <Timer className="h-4 w-4 text-muted-foreground" />
-                                </CardHeader>
-                                <CardContent>
-                                    <div className="flex flex-col">
-                                        <span className="text-2xl font-bold">{onTimePercentage}%</span>
-                                        <span className="text-xs text-muted-foreground mb-4">Puntualità interventi</span>
-
-                                        <div className="space-y-2">
-                                            <div className="flex justify-between text-xs">
-                                                <span className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full bg-green-500"></div>In Orario</span>
-                                                <span className="font-mono font-medium">{onTimeCount}</span>
-                                            </div>
-                                            <div className="flex justify-between text-xs">
-                                                <span className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full bg-red-500"></div>In Ritardo</span>
-                                                <span className="font-mono font-medium">{lateCount}</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </CardContent>
-                            </Card>
+                            <TremorCard className="ring-0 shadow-lg shadow-slate-200/50 dark:shadow-none border border-slate-200/60 p-4">
+                                <Flex justifyContent="start" className="space-x-2">
+                                    <Icon icon={Timer} color="violet" variant="light" size="sm" />
+                                    <Title>Performance SLA</Title>
+                                </Flex>
+                                <Flex className="mt-6" alignItems="baseline">
+                                    <Metric>{onTimePercentage}%</Metric>
+                                    <Text className="ml-2">Puntualità</Text>
+                                </Flex>
+                                <CategoryBar
+                                    values={[onTimeCount, lateCount]}
+                                    colors={['emerald', 'rose']}
+                                    showLabels={false}
+                                    className="mt-4"
+                                />
+                                <Legend
+                                    categories={['In Orario', 'In Ritardo']}
+                                    colors={['emerald', 'rose']}
+                                    className="mt-4"
+                                />
+                            </TremorCard>
 
                             {/* Stato Gestione */}
-                            <Card className="shadow-sm border-slate-200/50">
-                                <CardHeader className="pb-2 flex flex-row items-center justify-between space-y-0">
-                                    <CardTitle className="text-sm font-medium text-muted-foreground">Stato Gestione</CardTitle>
-                                    <BarChart3 className="h-4 w-4 text-muted-foreground" />
-                                </CardHeader>
-                                <CardContent>
-                                    <div className="space-y-3 mt-1">
-                                        {sortedGestione.length > 0 ? (
-                                            sortedGestione.map(([status, count]) => (
-                                                <div key={status} className="flex flex-col gap-1">
-                                                    <div className="flex justify-between text-xs">
-                                                        <span className="font-medium">{status}</span>
-                                                        <span className="text-muted-foreground">{count}</span>
-                                                    </div>
-                                                    <div className="h-1.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                                                        <div
-                                                            className={cn("h-full rounded-full",
-                                                                status === 'Completato' ? 'bg-emerald-500' :
-                                                                    status === 'In Corso' ? 'bg-violet-500' :
-                                                                        status === 'Da Pianificare' ? 'bg-amber-500' :
-                                                                            'bg-blue-400'
-                                                            )}
-                                                            style={{ width: `${(count / totalWOs) * 100}%` }}
-                                                        ></div>
-                                                    </div>
-                                                </div>
-                                            ))
-                                        ) : (
-                                            <div className="text-xs text-muted-foreground text-center py-4">Nessun dato disponibile</div>
-                                        )}
-                                    </div>
-                                </CardContent>
-                            </Card>
+                            <TremorCard className="ring-0 shadow-lg shadow-slate-200/50 dark:shadow-none border border-slate-200/60 p-4">
+                                <Flex justifyContent="start" className="space-x-2">
+                                    <Icon icon={BarChart3} color="blue" variant="light" size="sm" />
+                                    <Title>Stato Gestione</Title>
+                                </Flex>
+                                <div className="mt-4 h-[120px] overflow-hidden">
+                                    {gestioneData.length > 0 ? (
+                                        <BarList
+                                            data={gestioneData}
+                                            valueFormatter={(v: number) => `${v}`}
+                                            className="mt-2"
+                                            showAnimation={false}
+                                        />
+                                    ) : (
+                                        <Flex justifyContent="center" alignItems="center" className="h-full">
+                                            <Text>Nessun dato</Text>
+                                        </Flex>
+                                    )}
+                                </div>
+                            </TremorCard>
 
                             {/* Esiti Interventi */}
-                            <Card className="shadow-sm border-slate-200/50">
-                                <CardHeader className="pb-2 flex flex-row items-center justify-between space-y-0">
-                                    <CardTitle className="text-sm font-medium text-muted-foreground">Esiti Interventi</CardTitle>
-                                    <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
-                                </CardHeader>
-                                <CardContent>
-                                    <div className="flex items-center gap-4">
-                                        <div className="relative flex items-center justify-center w-16 h-16">
-                                            <svg className="w-full h-full transform -rotate-90">
-                                                <circle cx="32" cy="32" r="28" stroke="currentColor" strokeWidth="6" fill="transparent" className="text-slate-100 dark:text-slate-800" />
-                                                <circle cx="32" cy="32" r="28" stroke="currentColor" strokeWidth="6" fill="transparent"
-                                                    strokeDasharray={175.92}
-                                                    strokeDashoffset={175.92 - (175.92 * Number(okPercentage)) / 100}
-                                                    className="text-green-500 transition-all duration-1000 ease-out"
-                                                />
-                                            </svg>
-                                            <span className="absolute text-xs font-bold">{Number(okPercentage).toFixed(0)}%</span>
-                                        </div>
-                                        <div className="flex-1 space-y-2">
-                                            <div className="flex justify-between text-xs border-b border-slate-100 dark:border-slate-800 pb-1">
-                                                <span className="text-muted-foreground">Successo (OK)</span>
-                                                <span className="font-bold text-green-600">{okOutcomes}</span>
-                                            </div>
-                                            <div className="flex justify-between text-xs">
-                                                <span className="text-muted-foreground">Totale Esiti</span>
-                                                <span className="font-bold">{totalOutcomes}</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </CardContent>
-                            </Card>
+                            <TremorCard className="ring-0 shadow-lg shadow-slate-200/50 dark:shadow-none border border-slate-200/60 p-4">
+                                <Flex justifyContent="start" className="space-x-2">
+                                    <Icon icon={CheckCircle2} color="teal" variant="light" size="sm" />
+                                    <Title>Esiti Interventi</Title>
+                                </Flex>
+                                <Flex className="mt-4 h-[120px]">
+                                    <DonutChart
+                                        data={outcomeData}
+                                        category="value"
+                                        index="name"
+                                        valueFormatter={(v) => `${v}`}
+                                        colors={outcomeData.map(d => {
+                                            const name = d.name.toUpperCase();
+                                            if (name === 'OK') return 'emerald';
+                                            if (name === 'NON OK') return 'rose';
+                                            if (name === 'IN CORSO') return 'amber';
+                                            return 'slate';
+                                        })}
+                                        variant="pie"
+                                        showAnimation={false}
+                                        showLabel={false}
+                                        className="h-28 w-28"
+                                    />
+                                    <Legend
+                                        categories={outcomeData.length > 0 ? outcomeData.map(d => d.name) : []}
+                                        colors={outcomeData.map(d => {
+                                            const name = d.name.toUpperCase();
+                                            if (name === 'OK') return 'emerald';
+                                            if (name === 'NON OK') return 'rose';
+                                            if (name === 'IN CORSO') return 'amber';
+                                            return 'slate';
+                                        })}
+                                        className="max-w-[150px] truncate"
+                                    />
+                                </Flex>
+                            </TremorCard>
 
-                        </div>
+                        </Grid>
 
                         {/* Work Orders Table */}
                         <div className="border rounded-md">

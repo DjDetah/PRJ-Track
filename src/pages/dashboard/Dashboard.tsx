@@ -63,7 +63,7 @@ export default function Dashboard() {
     // Calculate Metrics
     const calculateStats = (data: WorkOrder[], allStatusesReference: string[] = []) => {
         const statusCounts: Record<string, number> = {};
-        const projectCounts: Record<string, { count: number; overdue: number }> = {};
+        const projectCounts: Record<string, { count: number; overdue: number; completed: number }> = {};
 
         // NEW: Gestione Counts
         const gestioneCounts: Record<string, number> = {};
@@ -90,7 +90,7 @@ export default function Dashboard() {
 
             // Initialize project stats if new
             if (!projectCounts[valProject]) {
-                projectCounts[valProject] = { count: 0, overdue: 0 };
+                projectCounts[valProject] = { count: 0, overdue: 0, completed: 0 };
             }
 
             statusCounts[valStatus] = (statusCounts[valStatus] || 0) + 1;
@@ -117,6 +117,8 @@ export default function Dashboard() {
             let isOverdue = false;
             if (isClosed) {
                 completedCount++;
+                projectCounts[valProject].completed += 1; // Track project completion
+
                 if (wo.chiuso && wo.fine_prevista) {
                     const closeDate = new Date(wo.chiuso);
                     const dueDate = new Date(wo.fine_prevista);
@@ -151,7 +153,8 @@ export default function Dashboard() {
                 name,
                 count: stats.count,
                 overdue: stats.overdue,
-                percentage: data.length > 0 ? (stats.count / data.length) * 100 : 0
+                percentage: data.length > 0 ? (stats.count / data.length) * 100 : 0, // Volume Share
+                completionPercentage: stats.count > 0 ? (stats.completed / stats.count) * 100 : 0 // Completion %
             })),
             // NEW Returns
             gestioneDistribution: Object.entries(gestioneCounts).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
@@ -193,23 +196,18 @@ export default function Dashboard() {
     }
 
     return (
-        <div className="space-y-8 h-full flex flex-col">
-            <div className="flex justify-between items-end">
-                <div>
-                    <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
-                    <p className="text-muted-foreground">
-                        Panoramica attività e analisi SLA.
-                    </p>
-                </div>
-                {(selectedProject || selectedCategory) && (
+        <div className="flex flex-col gap-6 h-full p-2">
+
+            {(selectedProject || selectedCategory) && (
+                <div className="flex justify-end">
                     <button
                         onClick={() => { setSelectedProject(null); setSelectedCategory(null); }}
                         className="text-sm font-medium text-destructive hover:bg-destructive/10 px-3 py-1 rounded-md transition-colors border border-destructive/20"
                     >
                         Resetta Filtri
                     </button>
-                )}
-            </div>
+                </div>
+            )}
 
             <KPIGrid
                 total={viewStats.total}
@@ -257,6 +255,6 @@ export default function Dashboard() {
                     />
                 </div>
             </div>
-        </div>
+        </div >
     );
 }

@@ -1,17 +1,17 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../../components/ui/card';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { BarChart, Legend } from '@tremor/react';
 
 interface OutcomesChartProps {
     data: { name: string; value: number }[];
 }
 
-const COLORS: Record<string, string> = {
-    'OK': '#22c55e', // Green-500
-    'NON OK': '#ef4444', // Red-500
-    'IN CORSO': '#eab308', // Yellow-500
-};
+const valueFormatter = (number: number) => number.toString();
 
-const DEFAULT_COLOR = '#94a3b8';
+const colorMap: Record<string, string> = {
+    'OK': 'emerald',
+    'NON OK': 'rose',
+    'IN CORSO': 'yellow',
+};
 
 export function OutcomesChart({ data }: OutcomesChartProps) {
     if (!data || data.length === 0 || data.every(d => d.value === 0)) {
@@ -30,6 +30,15 @@ export function OutcomesChart({ data }: OutcomesChartProps) {
         );
     }
 
+    // Transform data for Tremor BarChart to have different colors
+    // Format: [{ name: 'Esiti', 'OK': 10, 'NON OK': 5, ... }]
+    const transformedData = [
+        data.reduce((acc, item) => ({ ...acc, [item.name]: item.value }), { name: 'Esiti' })
+    ];
+
+    const categories = data.map(d => d.name);
+    const colors = data.map(d => colorMap[d.name] || 'gray');
+
     return (
         <Card className="col-span-1 shadow-lg shadow-slate-200/50 dark:shadow-none border-slate-200/60 transition-all hover:shadow-xl">
             <CardHeader>
@@ -38,27 +47,23 @@ export function OutcomesChart({ data }: OutcomesChartProps) {
                     Distribuzione degli esiti delle pianificazioni
                 </CardDescription>
             </CardHeader>
-            <CardContent className="h-[300px] p-0 pb-4">
-                <div style={{ width: '100%', height: '100%' }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={data} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
-                            <CartesianGrid strokeDasharray="3 3" opacity={0.3} vertical={false} />
-                            <XAxis dataKey="name" tickLine={false} axisLine={false} dy={10} fontSize={12} />
-                            <YAxis tickLine={false} axisLine={false} dx={-10} allowDecimals={false} fontSize={12} />
-                            <Tooltip
-                                cursor={{ fill: 'transparent' }}
-                                contentStyle={{ backgroundColor: 'rgba(255, 255, 255, 0.95)', borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                            />
-                            <Bar dataKey="value" radius={[4, 4, 0, 0]} barSize={50}>
-                                {data.map((entry, index) => (
-                                    <Cell
-                                        key={`cell-${index}`}
-                                        fill={COLORS[entry.name] || DEFAULT_COLOR}
-                                    />
-                                ))}
-                            </Bar>
-                        </BarChart>
-                    </ResponsiveContainer>
+            <CardContent className="h-[300px] flex flex-col items-center justify-center p-2">
+                <BarChart
+                    className="mt-2 flex-1 w-full"
+                    data={transformedData}
+                    index="name"
+                    categories={categories}
+                    colors={colors}
+                    valueFormatter={valueFormatter}
+                    yAxisWidth={48}
+                    showLegend={false}
+                />
+                <div className="mt-2 w-full flex justify-center scale-75">
+                    <Legend
+                        categories={categories}
+                        colors={colors}
+                        className="max-w-full justify-center"
+                    />
                 </div>
             </CardContent>
         </Card>

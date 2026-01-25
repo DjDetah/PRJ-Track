@@ -1,12 +1,14 @@
+
 import { useEffect, useState } from 'react';
 import { workOrderService, type WorkOrder } from '../../services/workOrderService';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardHeader } from '../../components/ui/card';
-import { Search, Loader2, ArrowUpDown, ArrowUp, ArrowDown, X, Filter, CheckCircle } from 'lucide-react';
+import { Search, Loader2, ArrowUpDown, ArrowUp, ArrowDown, X, Filter, CheckCircle, CheckSquare, Timer, Send, FileText } from 'lucide-react';
 import { Input } from '../../components/ui/input';
 import { Alert, AlertDescription, AlertTitle } from '../../components/ui/alert';
 import { WorkOrderDetailModal } from './components/WorkOrderDetailModal';
 import { cn } from '../../utils/cn';
+import { UnifiedStatCard } from '../../components/UnifiedStatCard';
 
 export default function WorkOrderList() {
     const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);
@@ -98,6 +100,17 @@ export default function WorkOrderList() {
             : <ArrowDown className="ml-2 h-4 w-4 text-primary" />;
     };
 
+    const getStatusConfig = (status: string) => {
+        const s = status.toLowerCase();
+
+        if (s === 'accettato') return { icon: CheckCircle, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-100 dark:bg-blue-900/30' };
+        if (s.includes('chiuso') || s.includes('completato')) return { icon: CheckSquare, color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-100 dark:bg-emerald-900/30' };
+        if (s === 'in attesa') return { icon: Timer, color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-100 dark:bg-amber-900/30' };
+        if (s === 'in attesa di invio') return { icon: Send, color: 'text-indigo-600 dark:text-indigo-400', bg: 'bg-indigo-100 dark:bg-indigo-900/30' };
+
+        return { icon: FileText, color: 'text-slate-600 dark:text-slate-400', bg: 'bg-slate-100 dark:bg-slate-800' };
+    };
+
     if (loading) {
         return (
             <div className="flex justify-center items-center h-64">
@@ -108,12 +121,7 @@ export default function WorkOrderList() {
 
     return (
         <div className="space-y-6">
-            <div className="flex justify-between items-center">
-                <div>
-                    <h1 className="text-3xl font-bold tracking-tight">Work Orders</h1>
-                    <p className="text-muted-foreground">Gestisci le attività operative</p>
-                </div>
-            </div>
+
 
             {error && (
                 <Alert variant="destructive">
@@ -124,44 +132,33 @@ export default function WorkOrderList() {
 
             {/* Status Filter Cards */}
             <div className="flex gap-4 overflow-x-auto pb-4 pt-2 px-1">
-                <Card
+                <UnifiedStatCard
+                    title="Totale"
+                    value={workOrders.length}
+                    icon={Filter}
+                    color="text-slate-600 dark:text-slate-400"
+                    bgColor="bg-slate-100 dark:bg-slate-800"
+                    isActive={statusFilter === null}
                     onClick={() => setStatusFilter(null)}
-                    className={cn(
-                        "cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-lg border-slate-200/60 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm min-w-[140px]",
-                        statusFilter === null ? "ring-2 ring-primary ring-offset-2 shadow-primary/20" : ""
-                    )}
-                >
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 p-2">
-                        <div className="text-xs font-semibold text-slate-700 dark:text-slate-200">Totale</div>
-                        <div className="p-1.5 rounded-full bg-slate-100 dark:bg-slate-800">
-                            <Filter className="h-3 w-3 text-slate-600 dark:text-slate-400" />
-                        </div>
-                    </CardHeader>
-                    <CardContent className="p-2 pt-0">
-                        <div className="text-lg font-bold text-slate-900 dark:text-white">{workOrders.length}</div>
-                    </CardContent>
-                </Card>
+                    className="flex-1 min-w-[150px]"
+                />
 
-                {Object.entries(statusCounts).map(([status, count]) => (
-                    <Card
-                        key={status}
-                        onClick={() => setStatusFilter(status === statusFilter ? null : status)}
-                        className={cn(
-                            "cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-lg border-slate-200/60 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm min-w-[140px]",
-                            statusFilter === status ? "ring-2 ring-primary ring-offset-2 shadow-primary/20" : ""
-                        )}
-                    >
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 p-2">
-                            <div className="text-xs font-semibold text-slate-700 dark:text-slate-200 uppercase truncate" title={status}>{status}</div>
-                            <div className="p-1.5 rounded-full bg-blue-50 dark:bg-blue-900/20">
-                                <CheckCircle className="h-3 w-3 text-blue-600 dark:text-blue-400" />
-                            </div>
-                        </CardHeader>
-                        <CardContent className="p-2 pt-0">
-                            <div className="text-lg font-bold text-slate-900 dark:text-white">{count}</div>
-                        </CardContent>
-                    </Card>
-                ))}
+                {Object.entries(statusCounts).map(([status, count]) => {
+                    const config = getStatusConfig(status);
+                    return (
+                        <UnifiedStatCard
+                            key={status}
+                            title={status}
+                            value={count}
+                            icon={config.icon}
+                            color={config.color}
+                            bgColor={config.bg}
+                            isActive={statusFilter === status}
+                            onClick={() => setStatusFilter(status === statusFilter ? null : status)}
+                            className="flex-1 min-w-[150px]"
+                        />
+                    );
+                })}
             </div>
 
             <Card>

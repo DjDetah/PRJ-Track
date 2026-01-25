@@ -1,6 +1,7 @@
 import { supabase } from './supabase';
 import { type Database } from '../types/supabase';
 import { priceListService } from './priceListService';
+import { getWorkingDays } from '../utils/dateUtils';
 
 export type WorkOrder = Database['public']['Tables']['work_orders']['Row'] & {
     pianificazioni?: {
@@ -177,18 +178,34 @@ export const workOrderService = {
     async getProjectStats() {
         const { data, error } = await supabase
             .from('work_orders')
-            .select('progetto, stato');
+            .select('progetto, stato, avvio_programmato, fine_prevista, pianificazioni(esito)');
 
         if (error) throw error;
 
         // Client-side aggregation
-        const statsMap = new Map<string, { total: number; closed: number; open: number }>();
+        interface ProjectAgg {
+            total: number;
+            closed: number;
+            open: number;
+            pacingCompleted: number;
+            startDates: number[];
+            endDates: number[];
+        }
+
+        const statsMap = new Map<string, ProjectAgg>();
         const closedStatuses = ['Closed', 'Completed', 'Chiuso', 'Completato', 'Terminato', 'chiuso completato'];
 
         data.forEach(row => {
             const project = row.progetto || 'Senza Progetto';
             if (!statsMap.has(project)) {
-                statsMap.set(project, { total: 0, closed: 0, open: 0 });
+                statsMap.set(project, {
+                    total: 0,
+                    closed: 0,
+                    open: 0,
+                    pacingCompleted: 0,
+                    startDates: [],
+                    endDates: []
+                });
             }
 
             const stat = statsMap.get(project)!;
@@ -200,12 +217,51 @@ export const workOrderService = {
             } else {
                 stat.open++;
             }
+
+            // Dates
+            if (row.avvio_programmato) stat.startDates.push(new Date(row.avvio_programmato).getTime());
+            if (row.fine_prevista) stat.endDates.push(new Date(row.fine_prevista).getTime());
+
+            // Pacing Completed (Closed OR Outcome OK)
+            // @ts-ignore
+            const hasOk = row.pianificazioni?.some((p: any) => p.esito === 'OK');
+            if (isClosed || hasOk) {
+                stat.pacingCompleted++;
+            }
         });
 
-        return Array.from(statsMap.entries()).map(([name, stats]) => ({
-            name,
-            ...stats
-        })).sort((a, b) => b.total - a.total);
+        return Array.from(statsMap.entries()).map(([name, stats]) => {
+            // Calculate Pacing Status
+            let pacingStatus: 'Sopra Soglia' | 'Sotto Soglia' | 'In Linea' | 'N/A' = 'N/A';
+
+            if (stats.startDates.length > 0 && stats.endDates.length > 0 && stats.total > 0) {
+                const earliestStart = new Date(Math.min(...stats.startDates));
+                const latestEnd = new Date(Math.max(...stats.endDates));
+
+                const totalWorkingDays = getWorkingDays(earliestStart, latestEnd);
+                const now = new Date();
+                const effectiveEndDate = now > latestEnd ? latestEnd : now;
+                const elapsedWorkingDays = getWorkingDays(earliestStart, effectiveEndDate);
+
+                if (totalWorkingDays > 0) {
+                    const dailyRate = stats.total / totalWorkingDays;
+                    const target = dailyRate * elapsedWorkingDays;
+                    const delta = stats.pacingCompleted - target;
+
+                    // Simple threshold logic
+                    pacingStatus = delta >= -0.5 ? 'Sopra Soglia' : 'Sotto Soglia';
+                    // Using -0.5 as tolerance to avoid flickering "Sotto Soglia" for minor float diffs
+                }
+            }
+
+            return {
+                name,
+                total: stats.total,
+                closed: stats.closed,
+                open: stats.open,
+                pacingStatus
+            };
+        }).sort((a, b) => b.total - a.total);
     },
 
     async getByProject(projectName: string) {

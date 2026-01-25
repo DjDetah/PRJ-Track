@@ -241,6 +241,30 @@ export const economicsService = {
         return { budget, actual, cost };
     },
 
+    async getAllProjectEconomics() {
+        const { data, error } = await supabase
+            .from('work_order_items')
+            .select('unit_price, quantity, total_price, type, work_orders!inner(progetto)');
+
+        if (error) throw error;
+
+        const economicsMap: Record<string, { budget: number; actual: number; cost: number }> = {};
+
+        data?.forEach((item: any) => {
+            const project = item.work_orders?.progetto || 'Senza Progetto';
+            if (!economicsMap[project]) {
+                economicsMap[project] = { budget: 0, actual: 0, cost: 0 };
+            }
+
+            const amount = item.total_price ?? (item.unit_price * item.quantity);
+            if (item.type === 'preventivo') economicsMap[project].budget += amount;
+            else if (item.type === 'consuntivo_cliente') economicsMap[project].actual += amount;
+            else if (item.type === 'consuntivo') economicsMap[project].cost += amount;
+        });
+
+        return economicsMap;
+    },
+
     async getOverallEconomics() {
         // Fetch ALL items to calculate global stats
         const { data, error } = await supabase

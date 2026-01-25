@@ -4,22 +4,35 @@ import { useAuth } from '../../contexts/AuthContext';
 import { cn } from '../../utils/cn';
 import {
     LayoutDashboard,
+    CalendarDays, // Imported
     ClipboardList,
     Settings,
     LogOut,
     Menu,
     User,
     Bell,
-    FolderKanban,
-    ScrollText
+    FolderKanban
 } from 'lucide-react';
 import { Button } from '../ui/button';
+import { userService } from '../../services/userService';
+import { useEffect } from 'react';
 
 export default function AppLayout() {
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const { user, signOut } = useAuth();
     const location = useLocation();
     const navigate = useNavigate();
+
+    const [profile, setProfile] = useState<{ full_name?: string | null, role?: string | null } | null>(null);
+
+    useEffect(() => {
+        if (user) {
+            userService.getAll().then(users => {
+                const me = users?.find(u => u.id === user.id);
+                if (me) setProfile(me);
+            });
+        }
+    }, [user]);
 
     const handleSignOut = async () => {
         await signOut();
@@ -28,15 +41,37 @@ export default function AppLayout() {
 
     const navItems = [
         { name: 'Dashboard', path: '/', icon: LayoutDashboard },
+        { name: 'Daily', path: '/daily', icon: CalendarDays }, // Changed Icon
         { name: 'Work Orders', path: '/work-orders', icon: ClipboardList },
         { name: 'Progetti', path: '/projects', icon: FolderKanban },
-        { name: 'Listini', path: '/lists', icon: ScrollText }, // Add Listini
-        { name: 'Import Excel', path: '/import', icon: ClipboardList }, // Changed Settings to generic import for now
         { name: 'Impostazioni', path: '/settings', icon: Settings },
     ];
 
+    const getPageTitle = () => {
+        switch (location.pathname) {
+            case '/':
+                return { title: 'Dashboard', subtitle: 'Panoramica attività' };
+            case '/daily':
+                return { title: 'Daily', subtitle: 'Pianificazione giornaliera' };
+            case '/work-orders':
+                return { title: 'Work Orders', subtitle: 'Gestione interventi' };
+            case '/projects':
+                return { title: 'Progetti', subtitle: 'Gestione commesse' };
+            case '/settings':
+                return { title: 'Impostazioni', subtitle: 'Configurazione sistema' };
+            case '/import': // Assuming this route might exist or be added
+                return { title: 'Import', subtitle: 'Importazione dati' };
+            default:
+                if (location.pathname.startsWith('/projects/')) return { title: 'Dettaglio Progetto', subtitle: 'Scheda tecnica' };
+                if (location.pathname.startsWith('/work-orders/')) return { title: 'Dettaglio Work Order', subtitle: 'Scheda intervento' };
+                return { title: '', subtitle: '' };
+        }
+    };
+
+    const pageInfo = getPageTitle();
+
     return (
-        <div className="min-h-screen bg-slate-50/50 dark:bg-slate-900 flex font-sans">
+        <div className="min-h-screen bg-slate-200 dark:bg-slate-900 flex font-sans">
             {/* Sidebar - Desktop */}
             <aside
                 className={cn(
@@ -92,7 +127,7 @@ export default function AppLayout() {
             {/* Main Content Wrapper */}
             <div className="flex-1 flex flex-col min-w-0">
                 {/* Header */}
-                <header className="h-16 bg-white dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-4 md:px-6">
+                <header className="h-16 bg-white dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-4 md:px-6 shrink-0">
                     <div className="flex items-center gap-4">
                         <Button
                             variant="ghost"
@@ -102,8 +137,13 @@ export default function AppLayout() {
                         >
                             <Menu className="h-5 w-5" />
                         </Button>
-                        {/* Mobile Menu Toggle could accept more work here */}
-                        <span className="font-semibold text-lg md:hidden">Enterprise App</span>
+
+                        <div className="flex flex-col justify-center">
+                            <h1 className="text-base font-bold text-slate-900 dark:text-slate-100 leading-tight">{pageInfo.title}</h1>
+                            {pageInfo.subtitle && (
+                                <p className="text-[10px] text-muted-foreground leading-tight">{pageInfo.subtitle}</p>
+                            )}
+                        </div>
                     </div>
 
                     <div className="flex items-center gap-4">
@@ -115,8 +155,12 @@ export default function AppLayout() {
                             <User className="h-4 w-4 text-slate-500" />
                         </div>
                         <div className="hidden md:block">
-                            <p className="text-sm font-medium leading-none">{user?.email}</p>
-                            <p className="text-xs text-muted-foreground">Operator</p>
+                            <p className="text-sm font-medium leading-none">
+                                {profile?.full_name || user?.email}
+                            </p>
+                            <p className="text-xs text-muted-foreground capitalize">
+                                {profile?.role || 'Guest'}
+                            </p>
                         </div>
                     </div>
                 </header>
