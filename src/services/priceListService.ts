@@ -41,7 +41,7 @@ export const priceListService = {
         return data;
     },
 
-    async setAsDefault(listinoName: string, tipo: 'Consuntivo' | 'Fornitore') {
+    async setAsDefault(id: string, tipo: 'Consuntivo' | 'Fornitore') {
         // 1. Unset default for all of this type
         const { error: unsetError } = await supabase
             .from('price_lists')
@@ -54,10 +54,40 @@ export const priceListService = {
         const { error: setError } = await supabase
             .from('price_lists')
             .update({ is_default: true })
-            .eq('name', listinoName)
-            .eq('type', tipo);
+            .eq('id', id);
 
         if (setError) throw setError;
+    },
+
+    async updateListino(id: string, updates: { name?: string; type?: 'Consuntivo' | 'Fornitore'; is_active?: boolean }) {
+        const { error } = await supabase
+            .from('price_lists')
+            .update(updates)
+            .eq('id', id);
+
+        if (error) throw error;
+    },
+
+    async createHeader(name: string, type: 'Consuntivo' | 'Fornitore') {
+        return await supabase
+            .from('price_lists')
+            .insert({ name, type })
+            .select()
+            .single();
+    },
+
+    async createBulkItems(items: any[], headerId: string) {
+        // Tag all items with headerId
+        const batch: ListinoInsert[] = items.map(item => ({
+            price_list_id: headerId,
+            codice: String(item.codice),
+            descrizione: String(item.descrizione),
+            descrizione_attivita: item.descrizione_attivita ? String(item.descrizione_attivita) : null,
+            importo: Number(item.importo) || 0
+        }));
+
+        const { error } = await supabase.from('listini').insert(batch);
+        return { error };
     },
 
     async importFromExcel(listinoName: string, tipo: 'Consuntivo' | 'Fornitore', file: File) {
@@ -100,8 +130,8 @@ export const priceListService = {
 
                         const codice = normalizedRow['codice'];
                         const descrizione = normalizedRow['descrizione'];
-                        const descrizione_attivita = normalizedRow['descrizione attivita'] || normalizedRow['descrizione_attivita'] || null;
-                        const importo = normalizedRow['importo'] ?? normalizedRow['prezzo'] ?? 0;
+                        const descrizione_attivita = normalizedRow['descrizione attività'] || normalizedRow['descrizione attivita'] || null;
+                        const importo = normalizedRow['importo'] ?? 0;
 
                         if (codice && descrizione) {
                             itemsToInsert.push({
@@ -114,14 +144,17 @@ export const priceListService = {
                         }
                     }
 
-                    if (itemsToInsert.length > 0) {
-                        const { error } = await supabase
+                    if (itemsToInsert.length === 0) {
+                        // Rollback header manually (optional, but good practice since no items were inserted)
+                        await supabase.from('price_lists').delete().eq('id', header.id);
+                        throw new Error("Nessun articolo valido trovato nel file. Verifica che le colonne 'Codice' e 'Descrizione' siano presenti e compilate correttamente.");
+                    }
+
+                    const { error } = await supabase
                             .from('listini')
                             .insert(itemsToInsert);
 
                         if (error) throw error;
-                    }
-
                     resolve();
                 } catch (error) {
                     reject(error);

@@ -11,6 +11,8 @@ import { Plus, Trash2, AlertTriangle, Users, Search } from 'lucide-react';
 // ... imports
 import { PriceListSection } from '../../components/settings/PriceListSection';
 import { ImportSection } from '../../components/settings/ImportSection';
+import { ResetDataSection } from '../../components/settings/ResetDataSection';
+import { useAuth } from '../../contexts/AuthContext';
 import {
     Dialog,
     DialogContent,
@@ -20,6 +22,7 @@ import {
 } from '../../components/ui/dialog';
 
 export function SettingsPage() {
+    const { user: currentUser } = useAuth();
     // --- State Definition ---
     const [reasons, setReasons] = useState<FailureReason[]>([]);
     const [loading, setLoading] = useState(true);
@@ -138,6 +141,9 @@ export function SettingsPage() {
         (u.full_name || '').toLowerCase().includes(userSearch.toLowerCase()) ||
         (u.email || '').toLowerCase().includes(userSearch.toLowerCase())
     );
+
+    const currentUserProfile = users.find(u => u.id === currentUser?.id);
+    const isAdmin = currentUserProfile?.role === 'admin';
 
     return (
         <div className="space-y-8">
@@ -314,6 +320,14 @@ export function SettingsPage() {
                     </table>
                 </div>
             </section>
+
+            {/* --- Dangerous Section: Admin Only --- */}
+            {isAdmin && (
+                <>
+                    <hr className="border-slate-200 dark:border-slate-800" />
+                    <ResetDataSection />
+                </>
+            )}
 
             {/* --- Existing Modal --- */}
             <Dialog open={openModal} onOpenChange={setOpenModal}>

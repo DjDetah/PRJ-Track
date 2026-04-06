@@ -6,6 +6,8 @@ import { Calendar, MapPin, ClipboardList, Phone, Building2, CheckCircle2, Sticky
 import { cn } from '../../../utils/cn';
 import type { WorkOrder } from '../../../services/workOrderService';
 import { PlanningManager } from './PlanningManager';
+import { projectSettingsService } from '../../../services/projectSettingsService';
+import { priceListService } from '../../../services/priceListService';
 import { EconomicsManager } from './EconomicsManager';
 import { economicsService, type WorkOrderItem } from '../../../services/economicsService';
 import { AddNoteModal } from './AddNoteModal';
@@ -52,12 +54,45 @@ export function WorkOrderDetailModal({ workOrder, open, onOpenChange, onUpdate }
     const [internalNotes, setInternalNotes] = useState<string | null>(workOrder.notes);
     const { user } = useAuth();
 
+    const [resolvedPriceListId, setResolvedPriceListId] = useState<string | null>(workOrder?.price_list_id || null);
+
     // Update internal notes when workOrder prop changes
     useEffect(() => {
         if (workOrder) {
             setInternalNotes(workOrder.notes);
+            resolvePriceListContext(workOrder);
         }
     }, [workOrder]);
+
+    const resolvePriceListContext = async (wo: WorkOrder) => {
+        // If explicitly set, use it.
+        if (wo.price_list_id) {
+            setResolvedPriceListId(wo.price_list_id);
+            return;
+        }
+
+        try {
+            // Check project setting
+            if (wo.progetto) {
+                 const projSet = await projectSettingsService.getSettings(wo.progetto);
+                 if (projSet?.client_price_list_id) {
+                     setResolvedPriceListId(projSet.client_price_list_id);
+                     return;
+                 }
+            }
+            
+            // Check global default
+            const lists = await priceListService.getUniqueListini();
+            const defaultList = lists.find(l => l.is_default && l.type === 'Consuntivo' && l.is_active);
+            if (defaultList) {
+                setResolvedPriceListId(defaultList.id);
+            } else {
+                setResolvedPriceListId(null);
+            }
+        } catch (e) {
+            console.error("Error resolving price list:", e);
+        }
+    };
 
     // Assuming we don't have user full_name in context freely available in this snippet without fetching profile, 
     // we'll try to find it or fallback to email.
@@ -102,7 +137,7 @@ export function WorkOrderDetailModal({ workOrder, open, onOpenChange, onUpdate }
                             <div>
                                 <DialogTitle className="text-2xl font-bold text-slate-900">Work Order {workOrder.work_order}</DialogTitle>
                                 <DialogDescription className="flex items-center gap-2 mt-1 text-base">
-                                    <MapPin className="h-4 w-4 text-slate-400" /> {workOrder.citta} &bull; <span className="text-slate-500 font-medium">{workOrder.progetto}</span>
+                                    <MapPin className="h-4 w-4 text-slate-400" /> <span>{workOrder.citta} &bull;</span> <span className="text-slate-500 font-medium">{workOrder.progetto}</span>
                                 </DialogDescription>
                             </div>
                         </div>
@@ -303,7 +338,7 @@ export function WorkOrderDetailModal({ workOrder, open, onOpenChange, onUpdate }
                                     <EconomicsManager
                                         workOrderId={workOrder.work_order}
                                         type="preventivo"
-                                        priceListId={workOrder.price_list_id}
+                                        priceListId={resolvedPriceListId}
                                         items={economicsItems}
                                         onUpdate={loadEconomics}
                                         readOnly={isReadOnly}
@@ -315,7 +350,7 @@ export function WorkOrderDetailModal({ workOrder, open, onOpenChange, onUpdate }
                                     <EconomicsManager
                                         workOrderId={workOrder.work_order}
                                         type="consuntivo_cliente"
-                                        priceListId={workOrder.price_list_id} // Same as Preventivo (Client)
+                                        priceListId={resolvedPriceListId} // Same as Preventivo (Client)
                                         items={economicsItems}
                                         onUpdate={loadEconomics}
                                         readOnly={isReadOnly}

@@ -4,7 +4,7 @@ import { workOrderService } from '../../services/workOrderService';
 import { economicsService } from '../../services/economicsService';
 import { Card, CardContent, CardHeader } from '../../components/ui/card';
 import { Card as TremorCard, Text, Flex, ProgressBar, Badge, Icon, Title, Grid } from '@tremor/react';
-import { Loader2, Search, X, TrendingUp, TrendingDown, Wallet, Building2 } from 'lucide-react';
+import { Loader2, Search, X, TrendingUp, TrendingDown, Wallet, Building2, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { Input } from '../../components/ui/input';
 import { Button } from '../../components/ui/button';
 import { cn } from '../../utils/cn';
@@ -19,6 +19,8 @@ interface ProjectStat {
     actual?: number;
     cost?: number;
     pacingStatus?: 'Sopra Soglia' | 'Sotto Soglia' | 'In Linea' | 'N/A';
+    marginPercent?: number; // Added for sorting
+    percentage?: number; // Added for sorting
 }
 
 export default function ProjectsList() {
@@ -27,6 +29,7 @@ export default function ProjectsList() {
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedProject, setSelectedProject] = useState<string | null>(null);
+    const [sortConfig, setSortConfig] = useState<{ key: keyof ProjectStat; direction: 'asc' | 'desc' } | null>(null);
 
     useEffect(() => {
         loadStats();
@@ -40,12 +43,22 @@ export default function ProjectsList() {
                 economicsService.getAllProjectEconomics()
             ]);
 
-            const mergedStats = statsData?.map(stat => ({
-                ...stat,
-                budget: projectEco[stat.name]?.budget || 0,
-                actual: projectEco[stat.name]?.actual || 0,
-                cost: projectEco[stat.name]?.cost || 0
-            })) || [];
+            const mergedStats = statsData?.map(stat => {
+                const total = stat.total || 0;
+                const closed = stat.closed || 0;
+                const actual = projectEco[stat.name]?.actual || 0;
+                const cost = projectEco[stat.name]?.cost || 0;
+                const margin = actual - cost;
+                
+                return {
+                    ...stat,
+                    budget: projectEco[stat.name]?.budget || 0,
+                    actual,
+                    cost,
+                    marginPercent: actual > 0 ? (margin / actual) * 100 : 0,
+                    percentage: total > 0 ? Math.round((closed / total) * 100) : 0
+                };
+            }) || [];
 
             setStats(mergedStats);
             setEconomics(ecoData || { budget: 0, actual: 0, cost: 0 });
@@ -56,9 +69,29 @@ export default function ProjectsList() {
         }
     };
 
-    const filteredStats = stats.filter(project =>
-        project.name.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    const filteredStats = stats
+        .filter(project => project.name.toLowerCase().includes(searchTerm.toLowerCase()))
+        .sort((a, b) => {
+            if (!sortConfig) return 0;
+            const aVal = a[sortConfig.key] ?? 0;
+            const bVal = b[sortConfig.key] ?? 0;
+            if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
+            if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
+            return 0;
+        });
+
+    const handleSort = (key: keyof ProjectStat) => {
+        let direction: 'asc' | 'desc' = 'asc';
+        if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') direction = 'desc';
+        setSortConfig({ key, direction });
+    };
+
+    const SortIcon = ({ columnKey }: { columnKey: string }) => {
+        if (sortConfig?.key !== columnKey) return <ArrowUpDown className="ml-1 h-3 w-3 text-muted-foreground/30 inline-block" />;
+        return sortConfig.direction === 'asc'
+            ? <ArrowUp className="ml-1 h-3 w-3 text-primary inline-block" />
+            : <ArrowDown className="ml-1 h-3 w-3 text-primary inline-block" />;
+    };
 
     // Calculated Metrics
     const delta = economics.actual - economics.budget;
@@ -165,16 +198,36 @@ export default function ProjectsList() {
                         <table className="w-full caption-bottom text-sm text-left">
                             <thead className="[&_tr]:border-b bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800">
                                 <tr className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted">
-                                    <th className="h-10 px-2 align-middle font-medium text-muted-foreground">Nome Progetto</th>
-                                    <th className="h-10 px-2 align-middle font-medium text-muted-foreground text-right">Totale Work Orders</th>
-                                    <th className="h-10 px-2 align-middle font-medium text-muted-foreground text-right text-green-600 dark:text-green-500">Completati</th>
-                                    <th className="h-10 px-2 align-middle font-medium text-muted-foreground text-right text-blue-600 dark:text-blue-500">Rimanenti</th>
-                                    <th className="h-10 px-2 align-middle font-medium text-muted-foreground text-right">Avanzamento</th>
-                                    <th className="h-10 px-2 align-middle font-medium text-muted-foreground text-center">Soglia</th>
-                                    <th className="h-10 px-2 align-middle font-medium text-muted-foreground text-right">Budget</th>
-                                    <th className="h-10 px-2 align-middle font-medium text-muted-foreground text-right">Ricavi</th>
-                                    <th className="h-10 px-2 align-middle font-medium text-muted-foreground text-right">Costi</th>
-                                    <th className="h-10 px-2 align-middle font-medium text-muted-foreground text-right">Margine (GP%)</th>
+                                    <th className="h-10 px-2 align-middle font-medium text-muted-foreground cursor-pointer hover:text-foreground" onClick={() => handleSort('name')}>
+                                        Nome Progetto <SortIcon columnKey="name" />
+                                    </th>
+                                    <th className="h-10 px-2 align-middle font-medium text-muted-foreground text-right cursor-pointer hover:text-foreground" onClick={() => handleSort('total')}>
+                                        Totale Work Orders <SortIcon columnKey="total" />
+                                    </th>
+                                    <th className="h-10 px-2 align-middle font-medium text-muted-foreground text-right text-green-600 dark:text-green-500 cursor-pointer hover:text-foreground hover:text-green-700" onClick={() => handleSort('closed')}>
+                                        Completati <SortIcon columnKey="closed" />
+                                    </th>
+                                    <th className="h-10 px-2 align-middle font-medium text-muted-foreground text-right text-blue-600 dark:text-blue-500 cursor-pointer hover:text-foreground hover:text-blue-700" onClick={() => handleSort('open')}>
+                                        Rimanenti <SortIcon columnKey="open" />
+                                    </th>
+                                    <th className="h-10 px-2 align-middle font-medium text-muted-foreground text-right cursor-pointer hover:text-foreground" onClick={() => handleSort('percentage')}>
+                                        Avanzamento <SortIcon columnKey="percentage" />
+                                    </th>
+                                    <th className="h-10 px-2 align-middle font-medium text-muted-foreground text-center cursor-pointer hover:text-foreground" onClick={() => handleSort('pacingStatus')}>
+                                        Soglia <SortIcon columnKey="pacingStatus" />
+                                    </th>
+                                    <th className="h-10 px-2 align-middle font-medium text-muted-foreground text-right cursor-pointer hover:text-foreground" onClick={() => handleSort('budget')}>
+                                        Budget <SortIcon columnKey="budget" />
+                                    </th>
+                                    <th className="h-10 px-2 align-middle font-medium text-muted-foreground text-right cursor-pointer hover:text-foreground" onClick={() => handleSort('actual')}>
+                                        Ricavi <SortIcon columnKey="actual" />
+                                    </th>
+                                    <th className="h-10 px-2 align-middle font-medium text-muted-foreground text-right cursor-pointer hover:text-foreground" onClick={() => handleSort('cost')}>
+                                        Costi <SortIcon columnKey="cost" />
+                                    </th>
+                                    <th className="h-10 px-2 align-middle font-medium text-muted-foreground text-right cursor-pointer hover:text-foreground" onClick={() => handleSort('marginPercent')}>
+                                        Margine (GP%) <SortIcon columnKey="marginPercent" />
+                                    </th>
                                 </tr>
                             </thead>
                             <tbody className="[&_tr:last-child]:border-0 divide-y divide-slate-100 dark:divide-slate-800">
@@ -196,11 +249,10 @@ export default function ProjectsList() {
                                     </tr>
                                 ) : (
                                     filteredStats.map((project) => {
-                                        const percentage = project.total > 0 ? Math.round((project.closed / project.total) * 100) : 0;
+                                        const percentage = project.percentage || 0;
                                         const actual = project.actual || 0;
                                         const cost = project.cost || 0;
-                                        const margin = actual - cost;
-                                        const marginPercent = actual > 0 ? (margin / actual) * 100 : 0;
+                                        const marginPercent = project.marginPercent || 0;
 
                                         return (
                                             <tr key={project.name} className="hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors group">

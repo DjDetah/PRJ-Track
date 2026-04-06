@@ -144,6 +144,7 @@ export interface Database {
                     name: string
                     type: 'Consuntivo' | 'Fornitore'
                     is_default: boolean
+                    is_active: boolean
                 }
                 Insert: {
                     id?: string
@@ -151,6 +152,7 @@ export interface Database {
                     name: string
                     type: 'Consuntivo' | 'Fornitore'
                     is_default?: boolean
+                    is_active?: boolean
                 }
                 Update: {
                     id?: string
@@ -158,6 +160,7 @@ export interface Database {
                     name?: string
                     type?: 'Consuntivo' | 'Fornitore'
                     is_default?: boolean
+                    is_active?: boolean
                 }
             }
             preventivi: {
@@ -363,6 +366,29 @@ export interface Database {
                     price_list_id?: string | null
                     notes?: string | null
                     gestione?: string | null
+                }
+            }
+            project_settings: {
+                Row: {
+                    project_name: string
+                    client_price_list_id: string | null
+                    supplier_price_list_id: string | null
+                    created_at: string
+                    updated_at: string
+                }
+                Insert: {
+                    project_name: string
+                    client_price_list_id?: string | null
+                    supplier_price_list_id?: string | null
+                    created_at?: string
+                    updated_at?: string
+                }
+                Update: {
+                    project_name?: string
+                    client_price_list_id?: string | null
+                    supplier_price_list_id?: string | null
+                    created_at?: string
+                    updated_at?: string
                 }
             }
         }

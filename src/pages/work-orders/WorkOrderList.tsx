@@ -19,7 +19,7 @@ export default function WorkOrderList() {
     const [visibleCount, setVisibleCount] = useState(50);
 
     // sorting & filtering
-    const [sortConfig, setSortConfig] = useState<{ key: keyof WorkOrder; direction: 'asc' | 'desc' } | null>(null);
+    const [sortConfig, setSortConfig] = useState<{ key: keyof WorkOrder | 'pianificazione'; direction: 'asc' | 'desc' } | null>(null);
     const [statusFilter, setStatusFilter] = useState<string | null>(null);
 
     useEffect(() => {
@@ -59,12 +59,12 @@ export default function WorkOrderList() {
         return acc;
     }, {} as Record<string, number>);
 
-    const handleSort = (key: keyof WorkOrder) => {
+    const handleSort = (key: keyof WorkOrder | 'pianificazione') => {
         let direction: 'asc' | 'desc' = 'asc';
         if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') {
             direction = 'desc';
         }
-        setSortConfig({ key, direction });
+        setSortConfig({ key: key as any, direction });
     };
 
     const sortedAndFilteredWorkOrders = workOrders
@@ -78,9 +78,21 @@ export default function WorkOrderList() {
         .sort((a, b) => {
             if (!sortConfig) return 0;
 
+            if (sortConfig.key === 'pianificazione') {
+                const getMinDate = (wo: WorkOrder) => {
+                    const dates = wo.pianificazioni?.filter(p => p.data_pianificazione).map(p => new Date(p.data_pianificazione!).getTime()).filter(t => !isNaN(t));
+                    return dates?.length ? Math.min(...dates) : 0;
+                };
+                const aDate = getMinDate(a);
+                const bDate = getMinDate(b);
+                if (aDate < bDate) return sortConfig.direction === 'asc' ? -1 : 1;
+                if (aDate > bDate) return sortConfig.direction === 'asc' ? 1 : -1;
+                return 0;
+            }
+
             // Handle potentially null/undefined values safely
-            const aValue = a[sortConfig.key] ?? '';
-            const bValue = b[sortConfig.key] ?? '';
+            const aValue = a[sortConfig.key as keyof WorkOrder] ?? '';
+            const bValue = b[sortConfig.key as keyof WorkOrder] ?? '';
 
             if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
             if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
@@ -93,11 +105,11 @@ export default function WorkOrderList() {
         setVisibleCount(prev => prev + 50);
     };
 
-    const SortIcon = ({ columnKey }: { columnKey: keyof WorkOrder }) => {
-        if (sortConfig?.key !== columnKey) return <ArrowUpDown className="ml-2 h-4 w-4 text-muted-foreground/30" />;
+    const SortIcon = ({ columnKey }: { columnKey: string }) => {
+        if (sortConfig?.key !== columnKey) return <ArrowUpDown className="ml-2 h-4 w-4 text-muted-foreground/30 inline-block" />;
         return sortConfig.direction === 'asc'
-            ? <ArrowUp className="ml-2 h-4 w-4 text-primary" />
-            : <ArrowDown className="ml-2 h-4 w-4 text-primary" />;
+            ? <ArrowUp className="ml-2 h-4 w-4 text-primary inline-block" />
+            : <ArrowDown className="ml-2 h-4 w-4 text-primary inline-block" />;
     };
 
     const getStatusConfig = (status: string) => {
@@ -215,11 +227,23 @@ export default function WorkOrderList() {
                                             <SortIcon columnKey="stato" />
                                         </div>
                                     </th>
-                                    <th className="h-10 px-2 align-middle font-medium text-muted-foreground">
-                                        Gestione
+                                    <th
+                                        className="h-10 px-2 align-middle font-medium text-muted-foreground cursor-pointer hover:text-foreground hover:bg-slate-100/50 dark:hover:bg-slate-800/50 transition-colors"
+                                        onClick={() => handleSort('gestione')}
+                                    >
+                                        <div className="flex items-center">
+                                            Gestione
+                                            <SortIcon columnKey="gestione" />
+                                        </div>
                                     </th>
-                                    <th className="h-10 px-2 align-middle font-medium text-muted-foreground">
-                                        Pianificazione
+                                    <th
+                                        className="h-10 px-2 align-middle font-medium text-muted-foreground cursor-pointer hover:text-foreground hover:bg-slate-100/50 dark:hover:bg-slate-800/50 transition-colors"
+                                        onClick={() => handleSort('pianificazione')}
+                                    >
+                                        <div className="flex items-center">
+                                            Pianificazione
+                                            <SortIcon columnKey="pianificazione" />
+                                        </div>
                                     </th>
                                     <th
                                         className="h-10 px-2 align-middle font-medium text-muted-foreground cursor-pointer hover:text-foreground hover:bg-slate-100/50 dark:hover:bg-slate-800/50 transition-colors"
@@ -239,7 +263,15 @@ export default function WorkOrderList() {
                                             <SortIcon columnKey="avvio_programmato" />
                                         </div>
                                     </th>
-                                    <th className="h-10 px-2 align-middle font-medium text-muted-foreground">Descrizione</th>
+                                    <th
+                                        className="h-10 px-2 align-middle font-medium text-muted-foreground cursor-pointer hover:text-foreground hover:bg-slate-100/50 dark:hover:bg-slate-800/50 transition-colors"
+                                        onClick={() => handleSort('descrizione')}
+                                    >
+                                        <div className="flex items-center">
+                                            Descrizione
+                                            <SortIcon columnKey="descrizione" />
+                                        </div>
+                                    </th>
                                 </tr>
                             </thead>
                             <tbody className="[&_tr:last-child]:border-0">

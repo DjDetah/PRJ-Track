@@ -8,7 +8,7 @@ import {
 } from '../../../components/ui/dialog';
 import { Card as TremorCard, Badge, Text, Metric, Flex, Grid, Title, Icon, DonutChart, BarList, CategoryBar, Legend } from '@tremor/react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
-import { Loader2, Calendar as CalendarIcon, ArrowUpDown, ArrowUp, ArrowDown, Timer, BarChart3, CheckCircle2, TrendingUp, TrendingDown, Activity, FileSpreadsheet } from 'lucide-react';
+import { Loader2, Calendar as CalendarIcon, ArrowUpDown, ArrowUp, ArrowDown, Timer, BarChart3, CheckCircle2, TrendingUp, TrendingDown, Activity, FileSpreadsheet, Settings } from 'lucide-react';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { cn } from '../../../utils/cn';
@@ -16,6 +16,11 @@ import { getWorkingDays } from '../../../utils/dateUtils';
 import { Button } from '../../../components/ui/button';
 
 import { economicsService } from '../../../services/economicsService';
+import { WorkOrderDetailModal } from '../../work-orders/components/WorkOrderDetailModal';
+import { projectSettingsService } from '../../../services/projectSettingsService';
+import { priceListService, type PriceList } from '../../../services/priceListService';
+import { Label } from '../../../components/ui/label';
+import { Select } from '../../../components/ui/select';
 
 interface ProjectDetailModalProps {
     projectName: string | null;
@@ -29,6 +34,13 @@ export default function ProjectDetailModal({ projectName, open, onOpenChange }: 
     const [loading, setLoading] = useState(true);
     const [visibleCount, setVisibleCount] = useState(50);
     const [sortConfig, setSortConfig] = useState<{ key: keyof WorkOrder; direction: 'asc' | 'desc' } | null>(null);
+    const [selectedWo, setSelectedWo] = useState<WorkOrder | null>(null);
+    const [showSettings, setShowSettings] = useState(false);
+    const [priceListsClient, setPriceListsClient] = useState<PriceList[]>([]);
+    const [priceListsSupplier, setPriceListsSupplier] = useState<PriceList[]>([]);
+    const [clientListId, setClientListId] = useState<string>('');
+    const [supplierListId, setSupplierListId] = useState<string>('');
+    const [savingSettings, setSavingSettings] = useState(false);
 
     useEffect(() => {
         if (projectName && open) {
@@ -50,10 +62,35 @@ export default function ProjectDetailModal({ projectName, open, onOpenChange }: 
             ]);
             setWorkOrders(woData || []);
             setEconomics(ecoData || { budget: 0, actual: 0, cost: 0 });
+
+            // Load settings and listini for the config modal
+            const [projSettings, listiniDb] = await Promise.all([
+                projectSettingsService.getSettings(projectName),
+                priceListService.getUniqueListini()
+            ]);
+            setPriceListsClient(listiniDb.filter(l => l.type === 'Consuntivo'));
+            setPriceListsSupplier(listiniDb.filter(l => l.type === 'Fornitore'));
+            setClientListId(projSettings?.client_price_list_id || '');
+            setSupplierListId(projSettings?.supplier_price_list_id || '');
+
         } catch (err) {
             console.error('Failed to load project details', err);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleSaveSettings = async () => {
+        if (!projectName) return;
+        setSavingSettings(true);
+        try {
+             await projectSettingsService.upsertSettings(projectName, clientListId || null, supplierListId || null);
+             setShowSettings(false);
+        } catch (e) {
+             console.error(e);
+             alert("Errore durante il salvataggio.");
+        } finally {
+             setSavingSettings(false);
         }
     };
 
@@ -175,11 +212,19 @@ export default function ProjectDetailModal({ projectName, open, onOpenChange }: 
 
     // --- Timeline Dates ---
     const startDates = workOrders
-        .map(wo => wo.avvio_programmato ? new Date(wo.avvio_programmato).getTime() : null)
+        .map(wo => {
+            if (!wo.avvio_programmato) return null;
+            const t = new Date(wo.avvio_programmato).getTime();
+            return isNaN(t) ? null : t;
+        })
         .filter((d): d is number => d !== null);
 
     const endDates = workOrders
-        .map(wo => wo.fine_prevista ? new Date(wo.fine_prevista).getTime() : null)
+        .map(wo => {
+            if (!wo.fine_prevista) return null;
+            const t = new Date(wo.fine_prevista).getTime();
+            return isNaN(t) ? null : t;
+        })
         .filter((d): d is number => d !== null);
 
     const earliestStart = startDates.length > 0 ? new Date(Math.min(...startDates)) : null;
@@ -222,6 +267,7 @@ export default function ProjectDetailModal({ projectName, open, onOpenChange }: 
     };
 
     return (
+        <>
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="max-w-6xl max-h-[95vh] overflow-hidden flex flex-col p-6">
                 <DialogHeader className="pb-4 border-b">
@@ -233,6 +279,9 @@ export default function ProjectDetailModal({ projectName, open, onOpenChange }: 
                             </span>
                         </div>
                         <div className="flex items-center gap-2">
+                            <Button variant="outline" size="icon" onClick={() => setShowSettings(true)} title="Impostazioni Progetto">
+                                <Settings className="h-4 w-4" />
+                            </Button>
                             <Button variant="outline" size="icon" onClick={handleExportExcel} title="Esporta Tabella (Excel)">
                                 <FileSpreadsheet className="h-4 w-4" />
                             </Button>
@@ -532,8 +581,14 @@ export default function ProjectDetailModal({ projectName, open, onOpenChange }: 
                                         </tr>
                                     ) : (
                                         visibleWorkOrders.map((wo) => (
-                                            <tr key={wo.work_order} className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted">
-                                                <td className="p-2 align-middle font-medium">{wo.work_order}</td>
+                                            <tr 
+                                                key={wo.work_order} 
+                                                className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted cursor-pointer group"
+                                                onClick={() => setSelectedWo(wo)}
+                                            >
+                                                <td className="p-2 align-middle font-medium text-indigo-600 dark:text-indigo-400 group-hover:underline">
+                                                    {wo.work_order}
+                                                </td>
                                                 <td className="p-2 align-middle">
                                                     <span className={cn(
                                                         "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold",
@@ -582,5 +637,54 @@ export default function ProjectDetailModal({ projectName, open, onOpenChange }: 
                 )}
             </DialogContent>
         </Dialog>
+
+        {selectedWo && (
+            <WorkOrderDetailModal
+                workOrder={selectedWo}
+                open={!!selectedWo}
+                onOpenChange={(o) => (!o && setSelectedWo(null))}
+                onUpdate={loadProjectDetails}
+            />
+        )}
+
+        {/* Settings Sub-Modal */}
+        <Dialog open={showSettings} onOpenChange={setShowSettings}>
+            <DialogContent className="max-w-md">
+                <DialogHeader>
+                    <DialogTitle>Impostazioni Progetto</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-6 py-4">
+                    <div className="space-y-4 rounded-md border border-slate-100 bg-slate-50 p-4">
+                        <div className="space-y-2">
+                            <Label className="text-xs uppercase font-bold text-slate-500">Listino di Riferimento (Cliente/Preventivo)</Label>
+                            <Select value={clientListId} onChange={(e) => setClientListId(e.target.value)}>
+                                <option value="">- Usa Listino Globale di Default -</option>
+                                {priceListsClient.map(pl => (
+                                    <option key={pl.id} value={pl.id}>{pl.name}</option>
+                                ))}
+                            </Select>
+                            <p className="text-[10px] text-muted-foreground mt-1">Sostituisce il default globale durante la visualizzazione dei preventivi.</p>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label className="text-xs uppercase font-bold text-slate-500">Listino Fornitori di Default</Label>
+                            <Select value={supplierListId} onChange={(e) => setSupplierListId(e.target.value)}>
+                                <option value="">- Non impostato -</option>
+                                {priceListsSupplier.map(pl => (
+                                    <option key={pl.id} value={pl.id}>{pl.name}</option>
+                                ))}
+                            </Select>
+                            <p className="text-[10px] text-muted-foreground mt-1">Preseleziona questo listino quando assegni un fornitore (Sviluppo Futuro).</p>
+                        </div>
+                    </div>
+                </div>
+                <div className="flex justify-end gap-2 border-t pt-4">
+                    <Button variant="outline" onClick={() => setShowSettings(false)}>Annulla</Button>
+                    <Button onClick={handleSaveSettings} disabled={savingSettings}>{savingSettings ? 'Salvataggio...' : 'Salva Impostazioni'}</Button>
+                </div>
+            </DialogContent>
+        </Dialog>
+
+        </>
     );
 }

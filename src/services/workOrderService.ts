@@ -76,10 +76,10 @@ export const workOrderService = {
             price_list_id: wo.price_list_id ?? defaultListinoId
         }));
 
-        // Supabase allows bulk insert by passing an array
+        // Supabase allows bulk insert/update by passing an array to upsert
         const { data, error } = await supabase
             .from('work_orders')
-            .insert(enrichedWorkOrders)
+            .upsert(enrichedWorkOrders, { onConflict: 'work_order' })
             .select();
 
         return { data, error };
