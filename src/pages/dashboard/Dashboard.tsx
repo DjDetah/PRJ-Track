@@ -9,8 +9,10 @@ import { OutcomesChart } from './components/OutcomesChart'; // NEW
 import { FailureReasonsTable } from './components/FailureReasonsTable';
 import { Loader2 } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '../../components/ui/alert';
+import { useClient } from '../../contexts/ClientContext';
 
 export default function Dashboard() {
+    const { activeCliente } = useClient();
     const [rawData, setRawData] = useState<WorkOrder[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -21,8 +23,13 @@ export default function Dashboard() {
 
     useEffect(() => {
         async function loadData() {
+            if (!activeCliente) {
+                setRawData([]);
+                setLoading(false);
+                return;
+            }
             try {
-                const data = await workOrderService.getAll();
+                const data = await workOrderService.getAll(activeCliente.id);
                 setRawData(data || []);
             } catch (err: any) {
                 console.error(err);
@@ -32,7 +39,7 @@ export default function Dashboard() {
             }
         }
         loadData();
-    }, []);
+    }, [activeCliente?.id]);
 
     // Filtering Helpers
     const matchesCategory = (wo: WorkOrder, category: string | null) => {

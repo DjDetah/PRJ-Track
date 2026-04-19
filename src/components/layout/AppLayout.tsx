@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { useClient } from '../../contexts/ClientContext';
 import { cn } from '../../utils/cn';
 import {
     LayoutDashboard,
@@ -20,6 +21,7 @@ import { useEffect } from 'react';
 export default function AppLayout() {
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const { user, signOut } = useAuth();
+    const { availableClienti, activeCliente, setActiveCliente, isLoadingClienti } = useClient();
     const location = useLocation();
     const navigate = useNavigate();
 
@@ -70,6 +72,36 @@ export default function AppLayout() {
 
     const pageInfo = getPageTitle();
 
+    if (isLoadingClienti) {
+        return <div className="min-h-screen flex items-center justify-center dark:bg-slate-900 bg-slate-100 text-slate-500">
+            Caricamento impostazioni iniziali...
+        </div>;
+    }
+
+    // Modalità bloccante se utente ha più clienti ma non ne ha scelto ancora uno
+    if (!activeCliente && availableClienti.length > 1) {
+        return (
+            <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                <div className="bg-white dark:bg-slate-950 p-6 rounded-xl shadow-2xl max-w-sm w-full border border-slate-200 dark:border-slate-800">
+                    <h2 className="text-xl font-bold mb-2">Seleziona Cliente</h2>
+                    <p className="text-sm text-slate-500 mb-6">Scegli l'ambiente di lavoro con cui vuoi procedere.</p>
+                    <div className="space-y-3">
+                        {availableClienti.map(cliente => (
+                            <button
+                                key={cliente.id}
+                                onClick={() => setActiveCliente(cliente)}
+                                className="w-full text-left px-4 py-3 rounded-lg border border-slate-200 dark:border-slate-800 hover:border-primary cursor-pointer transition-all flex items-center gap-3 group"
+                            >
+                                <div className="w-4 h-4 rounded-full" style={{ backgroundColor: cliente.colore_hex || '#0f172a' }}></div>
+                                <span className="font-semibold group-hover:text-primary transition-colors">{cliente.nome_cliente}</span>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="min-h-screen bg-slate-200 dark:bg-slate-900 flex font-sans">
             {/* Sidebar - Desktop */}
@@ -78,6 +110,7 @@ export default function AppLayout() {
                     "hidden md:flex flex-col w-64 bg-white dark:bg-slate-950 border-r border-slate-200 dark:border-slate-800 transition-all duration-300",
                     !sidebarOpen && "w-20"
                 )}
+                style={activeCliente?.colore_hex ? { borderLeft: `12px solid ${activeCliente.colore_hex}` } : {}}
             >
                 <div className="h-16 flex items-center px-4 border-b border-slate-200 dark:border-slate-800">
                     <div className="flex items-center gap-2 font-bold text-xl text-primary overflow-hidden whitespace-nowrap">
@@ -147,6 +180,30 @@ export default function AppLayout() {
                     </div>
 
                     <div className="flex items-center gap-4">
+                        {/* Multi-Client Switcher Inline */}
+                        {availableClienti.length > 1 && activeCliente && (
+                            <div className="hidden md:flex items-center gap-2 mr-2 border-r pr-4 border-slate-200 dark:border-slate-800">
+                                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: activeCliente.colore_hex || '#000' }}></div>
+                                <select 
+                                    className="text-sm border-0 bg-transparent font-semibold cursor-pointer outline-none ring-0 text-slate-700 dark:text-slate-300 max-w-[200px] lg:max-w-none"
+                                    value={activeCliente.id}
+                                    onChange={(e) => {
+                                        const c = availableClienti.find(x => x.id === e.target.value);
+                                        if (c) setActiveCliente(c);
+                                    }}
+                                >
+                                    {availableClienti.map(c => (
+                                        <option key={c.id} value={c.id}>{c.nome_cliente}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
+                        {!activeCliente && availableClienti.length === 0 && (
+                            <div className="hidden md:block mr-2 border-r pr-4 border-slate-200 text-xs text-rose-500 font-bold">
+                                NESSUN CLIENTE
+                            </div>
+                        )}
+
                         <Button variant="ghost" size="icon" className="relative">
                             <Bell className="h-5 w-5" />
                             <span className="absolute top-2 right-2 h-2 w-2 bg-red-500 rounded-full" />

@@ -12,6 +12,8 @@ import { Plus, Trash2, AlertTriangle, Users, Search } from 'lucide-react';
 import { PriceListSection } from '../../components/settings/PriceListSection';
 import { ImportSection } from '../../components/settings/ImportSection';
 import { ResetDataSection } from '../../components/settings/ResetDataSection';
+import { ClientiSection } from '../../components/settings/ClientiSection';
+import { UserClientManager } from '../../components/settings/UserClientManager';
 import { useAuth } from '../../contexts/AuthContext';
 import {
     Dialog,
@@ -148,6 +150,9 @@ export function SettingsPage() {
     return (
         <div className="space-y-8">
 
+            {/* --- Client Management Section (Admin Only) --- */}
+            {isAdmin && <ClientiSection />}
+            {isAdmin && <hr className="border-slate-200 dark:border-slate-800" />}
 
             {/* --- User Management Section --- */}
             <section className="space-y-4">
@@ -178,17 +183,18 @@ export function SettingsPage() {
                     <table className="w-full text-sm text-left">
                         <thead className="bg-slate-50 dark:bg-slate-800/50 text-muted-foreground font-medium border-b border-slate-200 dark:border-slate-800">
                             <tr>
-                                <th className="px-4 py-3 w-1/3">Utente (Click per modificare)</th>
-                                <th className="px-4 py-3 w-1/3">Email</th>
+                                <th className="px-4 py-3 w-1/4">Utente (Click per modificare)</th>
+                                <th className="px-4 py-3 w-1/4">Email</th>
                                 <th className="px-4 py-3">Ruolo</th>
+                                <th className="px-4 py-3">Assegnazioni</th>
                                 <th className="px-4 py-3 text-right">Registrato il</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                             {loadingUsers ? (
-                                <tr><td colSpan={4} className="p-4 text-center text-xs">Caricamento utenti...</td></tr>
+                                <tr><td colSpan={5} className="p-4 text-center text-xs">Caricamento utenti...</td></tr>
                             ) : filteredUsers.length === 0 ? (
-                                <tr><td colSpan={4} className="p-8 text-center text-muted-foreground">Nessun utente trovato</td></tr>
+                                <tr><td colSpan={5} className="p-8 text-center text-muted-foreground">Nessun utente trovato</td></tr>
                             ) : filteredUsers.map(user => (
                                 <tr key={user.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                                     <td className="px-4 py-3 font-medium text-slate-800 dark:text-slate-200">
@@ -237,6 +243,9 @@ export function SettingsPage() {
                                             <option value="supervisor">Supervisor</option>
                                             <option value="operator">Operator</option>
                                         </Select>
+                                    </td>
+                                    <td className="px-4 py-3">
+                                        <UserClientManager profileId={user.id} userName={user.full_name || user.email} />
                                     </td>
                                     <td className="px-4 py-3 text-right text-xs text-muted-foreground">
                                         {user.created_at ? new Date(user.created_at).toLocaleDateString() : '-'}
@@ -332,8 +341,7 @@ export function SettingsPage() {
             {/* --- Existing Modal --- */}
             <Dialog open={openModal} onOpenChange={setOpenModal}>
                 <DialogContent
-                    className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
-                    style={{ width: '600px', maxWidth: '90vw' }}
+                    className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800"
                 >
                     <DialogHeader className="border-b border-slate-100 dark:border-slate-800 pb-4">
                         <DialogTitle className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">

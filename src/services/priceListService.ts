@@ -11,11 +11,17 @@ export const priceListService = {
     // Keeping this for compatibility if used somewhere for raw rows, but likely needs updates if columns changed.
     // For now, let's focus on the refactor methods.
 
-    async getUniqueListini() {
-        const { data, error } = await supabase
+    async getUniqueListini(activeClientId?: string | null) {
+        let query = supabase
             .from('price_lists')
             .select('*')
             .order('created_at', { ascending: false });
+
+        if (activeClientId) {
+            query = query.eq('cliente_id', activeClientId);
+        }
+
+        const { data, error } = await query;
 
         if (error) throw error;
 
@@ -28,25 +34,35 @@ export const priceListService = {
         }));
     },
 
-    async getDefault(tipo: 'Consuntivo' | 'Fornitore') {
-        const { data, error } = await supabase
+    async getDefault(tipo: 'Consuntivo' | 'Fornitore', activeClientId?: string | null) {
+        let query = supabase
             .from('price_lists')
             .select('*')
             .eq('type', tipo)
-            .eq('is_default', true)
-            .limit(1)
-            .single();
+            .eq('is_default', true);
+
+        if (activeClientId) {
+            query = query.eq('cliente_id', activeClientId);
+        }
+
+        const { data, error } = await query.limit(1).single();
 
         if (error && error.code !== 'PGRST116') throw error;
         return data;
     },
 
-    async setAsDefault(id: string, tipo: 'Consuntivo' | 'Fornitore') {
-        // 1. Unset default for all of this type
-        const { error: unsetError } = await supabase
+    async setAsDefault(id: string, tipo: 'Consuntivo' | 'Fornitore', activeClientId?: string | null) {
+        // 1. Unset default for all of this type (and optionally scoped by client)
+        let unsetQuery = supabase
             .from('price_lists')
             .update({ is_default: false })
             .eq('type', tipo);
+
+        if (activeClientId) {
+            unsetQuery = unsetQuery.eq('cliente_id', activeClientId);
+        }
+
+        const { error: unsetError } = await unsetQuery;
 
         if (unsetError) throw unsetError;
 
@@ -68,10 +84,10 @@ export const priceListService = {
         if (error) throw error;
     },
 
-    async createHeader(name: string, type: 'Consuntivo' | 'Fornitore') {
+    async createHeader(name: string, type: 'Consuntivo' | 'Fornitore', activeClientId?: string | null) {
         return await supabase
             .from('price_lists')
-            .insert({ name, type })
+            .insert({ name, type, cliente_id: activeClientId || null })
             .select()
             .single();
     },
@@ -90,7 +106,7 @@ export const priceListService = {
         return { error };
     },
 
-    async importFromExcel(listinoName: string, tipo: 'Consuntivo' | 'Fornitore', file: File) {
+    async importFromExcel(listinoName: string, tipo: 'Consuntivo' | 'Fornitore', file: File, activeClientId?: string | null) {
         return new Promise<void>((resolve, reject) => {
             const reader = new FileReader();
             reader.onload = async (e) => {
@@ -101,17 +117,12 @@ export const priceListService = {
                     const worksheet = workbook.Sheets[sheetName];
                     const jsonData = XLSX.utils.sheet_to_json(worksheet);
 
-                    // 1. Create Header
-                    // Check if exists? Unique constraint will handle duplicates, but maybe we want to overwrite?
-                    // For now, let's assume new list import. If duplicate name/type, it will fail.
-                    // Or we could append timestamp to name if duplicate?
-                    // User probably wants to re-upload. Ideally we should warn.
-                    // Let's just try insert.
                     const { data: header, error: headerError } = await supabase
                         .from('price_lists')
                         .insert({
                             name: listinoName,
-                            type: tipo
+                            type: tipo,
+                            cliente_id: activeClientId || null
                         })
                         .select()
                         .single();

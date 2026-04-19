@@ -9,8 +9,10 @@ import { Alert, AlertDescription, AlertTitle } from '../../components/ui/alert';
 import { WorkOrderDetailModal } from './components/WorkOrderDetailModal';
 import { cn } from '../../utils/cn';
 import { UnifiedStatCard } from '../../components/UnifiedStatCard';
+import { useClient } from '../../contexts/ClientContext';
 
 export default function WorkOrderList() {
+    const { activeCliente } = useClient();
     const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -23,13 +25,18 @@ export default function WorkOrderList() {
     const [statusFilter, setStatusFilter] = useState<string | null>(null);
 
     useEffect(() => {
-        fetchWorkOrders();
-    }, []);
+        if (activeCliente) {
+            fetchWorkOrders();
+        } else {
+            setWorkOrders([]);
+            setLoading(false);
+        }
+    }, [activeCliente?.id]);
 
     const fetchWorkOrders = async (silent = false) => {
         if (!silent) setLoading(true);
         try {
-            const data = await workOrderService.getAll();
+            const data = await workOrderService.getAll(activeCliente?.id);
             setWorkOrders(data);
 
             // If a work order is selected, update it with fresh data

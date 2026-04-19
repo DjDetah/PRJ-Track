@@ -207,7 +207,7 @@ export const economicsService = {
         return { count: itemsToInsert.length };
     },
 
-    async getProjectEconomics(projectName: string) {
+    async getProjectEconomics(projectName: string, activeClientId?: string | null) {
         if (!projectName) return { budget: 0, actual: 0, cost: 0 };
 
         // Fetch all items for work orders belonging to this project
@@ -215,12 +215,16 @@ export const economicsService = {
         // and using !inner for filtering.
         let query = supabase
             .from('work_order_items')
-            .select('unit_price, quantity, total_price, type, work_orders!inner(progetto)');
+            .select('unit_price, quantity, total_price, type, work_orders!inner(progetto, cliente_id)');
 
         if (projectName === 'Senza Progetto') {
             query = query.is('work_orders.progetto', null);
         } else {
             query = query.eq('work_orders.progetto', projectName);
+        }
+
+        if (activeClientId) {
+            query = query.eq('work_orders.cliente_id', activeClientId);
         }
 
         const { data, error } = await query;
@@ -241,10 +245,16 @@ export const economicsService = {
         return { budget, actual, cost };
     },
 
-    async getAllProjectEconomics() {
-        const { data, error } = await supabase
+    async getAllProjectEconomics(activeClientId?: string | null) {
+        let query = supabase
             .from('work_order_items')
-            .select('unit_price, quantity, total_price, type, work_orders!inner(progetto)');
+            .select('unit_price, quantity, total_price, type, work_orders!inner(progetto, cliente_id)');
+
+        if (activeClientId) {
+            query = query.eq('work_orders.cliente_id', activeClientId);
+        }
+
+        const { data, error } = await query;
 
         if (error) throw error;
 
@@ -265,11 +275,17 @@ export const economicsService = {
         return economicsMap;
     },
 
-    async getOverallEconomics() {
+    async getOverallEconomics(activeClientId?: string | null) {
         // Fetch ALL items to calculate global stats
-        const { data, error } = await supabase
+        let query = supabase
             .from('work_order_items')
-            .select('unit_price, quantity, total_price, type');
+            .select('unit_price, quantity, total_price, type, work_orders!inner(cliente_id)');
+
+        if (activeClientId) {
+            query = query.eq('work_orders.cliente_id', activeClientId);
+        }
+
+        const { data, error } = await query;
 
         if (error) throw error;
 

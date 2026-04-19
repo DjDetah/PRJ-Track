@@ -9,6 +9,7 @@ import { Input } from '../../components/ui/input';
 import { Button } from '../../components/ui/button';
 import { cn } from '../../utils/cn';
 import ProjectDetailModal from './components/ProjectDetailModal';
+import { useClient } from '../../contexts/ClientContext';
 
 interface ProjectStat {
     name: string;
@@ -24,6 +25,7 @@ interface ProjectStat {
 }
 
 export default function ProjectsList() {
+    const { activeCliente } = useClient();
     const [stats, setStats] = useState<ProjectStat[]>([]);
     const [economics, setEconomics] = useState({ budget: 0, actual: 0, cost: 0 });
     const [loading, setLoading] = useState(true);
@@ -32,15 +34,21 @@ export default function ProjectsList() {
     const [sortConfig, setSortConfig] = useState<{ key: keyof ProjectStat; direction: 'asc' | 'desc' } | null>(null);
 
     useEffect(() => {
-        loadStats();
-    }, []);
+        if (activeCliente) {
+            loadStats();
+        } else {
+            setStats([]);
+            setEconomics({ budget: 0, actual: 0, cost: 0 });
+            setLoading(false);
+        }
+    }, [activeCliente?.id]);
 
     const loadStats = async () => {
         try {
             const [statsData, ecoData, projectEco] = await Promise.all([
-                workOrderService.getProjectStats(),
-                economicsService.getOverallEconomics(),
-                economicsService.getAllProjectEconomics()
+                workOrderService.getProjectStats(activeCliente?.id),
+                economicsService.getOverallEconomics(activeCliente?.id),
+                economicsService.getAllProjectEconomics(activeCliente?.id)
             ]);
 
             const mergedStats = statsData?.map(stat => {

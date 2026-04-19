@@ -14,12 +14,18 @@ export type WorkOrderInsert = Database['public']['Tables']['work_orders']['Inser
 export type WorkOrderUpdate = Database['public']['Tables']['work_orders']['Update'];
 
 export const workOrderService = {
-    // Fetch all work orders (filtered by RLS automatically)
-    async getAll() {
-        const { data, error } = await supabase
+    // Fetch all work orders (filtered by active client)
+    async getAll(activeClientId?: string | null) {
+        let query = supabase
             .from('work_orders')
             .select('*, pianificazioni(data_pianificazione, esito, motivazione_fallimento)')
             .order('system_created_at', { ascending: false });
+
+        if (activeClientId) {
+            query = query.eq('cliente_id', activeClientId);
+        }
+
+        const { data, error } = await query;
 
         if (error) throw error;
         return data;
@@ -58,7 +64,7 @@ export const workOrderService = {
     },
 
     // Create multiple work orders (Bulk Import)
-    async createBulk(workOrders: WorkOrderInsert[]) {
+    async createBulk(workOrders: WorkOrderInsert[], activeClientId?: string | null) {
         // Fetch default listino once for efficiency
         let defaultListinoId: string | null = null;
         try {
@@ -73,7 +79,8 @@ export const workOrderService = {
         // Assign to all items that don't have one
         const enrichedWorkOrders = workOrders.map(wo => ({
             ...wo,
-            price_list_id: wo.price_list_id ?? defaultListinoId
+            price_list_id: wo.price_list_id ?? defaultListinoId,
+            cliente_id: activeClientId || null
         }));
 
         // Supabase allows bulk insert/update by passing an array to upsert
@@ -175,10 +182,16 @@ export const workOrderService = {
         if (error) throw error;
     },
 
-    async getProjectStats() {
-        const { data, error } = await supabase
+    async getProjectStats(activeClientId?: string | null) {
+        let query = supabase
             .from('work_orders')
             .select('progetto, stato, avvio_programmato, fine_prevista, pianificazioni(esito)');
+
+        if (activeClientId) {
+            query = query.eq('cliente_id', activeClientId);
+        }
+
+        const { data, error } = await query;
 
         if (error) throw error;
 

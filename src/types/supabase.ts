@@ -9,6 +9,46 @@ export type Json =
 export interface Database {
     public: {
         Tables: {
+            clienti: {
+                Row: {
+                    id: string
+                    nome_cliente: string
+                    colore_hex: string
+                    created_at: string
+                    updated_at: string
+                }
+                Insert: {
+                    id?: string
+                    nome_cliente: string
+                    colore_hex?: string
+                    created_at?: string
+                    updated_at?: string
+                }
+                Update: {
+                    id?: string
+                    nome_cliente?: string
+                    colore_hex?: string
+                    created_at?: string
+                    updated_at?: string
+                }
+            }
+            user_clienti: {
+                Row: {
+                    profile_id: string
+                    cliente_id: string
+                    created_at: string
+                }
+                Insert: {
+                    profile_id: string
+                    cliente_id: string
+                    created_at?: string
+                }
+                Update: {
+                    profile_id?: string
+                    cliente_id?: string
+                    created_at?: string
+                }
+            }
             profiles: {
                 Row: {
                     id: string
@@ -51,6 +91,7 @@ export interface Database {
                     stato: string
                     created_at: string | null
                     updated_at: string | null
+                    cliente_id: string | null
                 }
                 Insert: {
                     id?: string
@@ -67,6 +108,7 @@ export interface Database {
                     stato?: string
                     created_at?: string | null
                     updated_at?: string | null
+                    cliente_id?: string | null
                 }
                 Update: {
                     id?: string
@@ -83,6 +125,7 @@ export interface Database {
                     stato?: string
                     created_at?: string | null
                     updated_at?: string | null
+                    cliente_id?: string | null
                 }
             }
             consuntivi: {
@@ -145,6 +188,7 @@ export interface Database {
                     type: 'Consuntivo' | 'Fornitore'
                     is_default: boolean
                     is_active: boolean
+                    cliente_id: string | null
                 }
                 Insert: {
                     id?: string
@@ -153,6 +197,7 @@ export interface Database {
                     type: 'Consuntivo' | 'Fornitore'
                     is_default?: boolean
                     is_active?: boolean
+                    cliente_id?: string | null
                 }
                 Update: {
                     id?: string
@@ -161,6 +206,7 @@ export interface Database {
                     type?: 'Consuntivo' | 'Fornitore'
                     is_default?: boolean
                     is_active?: boolean
+                    cliente_id?: string | null
                 }
             }
             preventivi: {
@@ -313,6 +359,7 @@ export interface Database {
                     price_list_id: string | null
                     notes: string | null
                     gestione: string | null
+                    cliente_id: string | null
                 }
                 Insert: {
                     work_order: string
@@ -339,7 +386,7 @@ export interface Database {
                     price_list_id?: string | null
                     notes?: string | null
                     gestione?: string | null
-
+                    cliente_id?: string | null
                 }
                 Update: {
                     work_order?: string
@@ -366,6 +413,7 @@ export interface Database {
                     price_list_id?: string | null
                     notes?: string | null
                     gestione?: string | null
+                    cliente_id?: string | null
                 }
             }
             project_settings: {
@@ -375,6 +423,7 @@ export interface Database {
                     supplier_price_list_id: string | null
                     created_at: string
                     updated_at: string
+                    cliente_id: string | null
                 }
                 Insert: {
                     project_name: string
@@ -382,6 +431,7 @@ export interface Database {
                     supplier_price_list_id?: string | null
                     created_at?: string
                     updated_at?: string
+                    cliente_id?: string | null
                 }
                 Update: {
                     project_name?: string
@@ -389,6 +439,7 @@ export interface Database {
                     supplier_price_list_id?: string | null
                     created_at?: string
                     updated_at?: string
+                    cliente_id?: string | null
                 }
             }
         }

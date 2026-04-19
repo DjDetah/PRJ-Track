@@ -6,6 +6,7 @@ import { ScrollText, AlertCircle } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '../../components/ui/alert';
 import { Badge } from '../../components/ui/badge';
 import { EditPriceListModal } from './EditPriceListModal';
+import { useClient } from '../../contexts/ClientContext';
 
 interface PriceListHeader {
     id: string;
@@ -17,6 +18,7 @@ interface PriceListHeader {
 }
 
 export function PriceListSection() {
+    const { activeCliente } = useClient();
     const [listini, setListini] = useState<PriceListHeader[]>([]);
     const [loading, setLoading] = useState(true);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -25,7 +27,7 @@ export function PriceListSection() {
     const loadData = async () => {
         setLoading(true);
         try {
-            const data = await priceListService.getUniqueListini();
+            const data = await priceListService.getUniqueListini(activeCliente?.id);
             setListini(data as unknown as PriceListHeader[]);
         } catch (err: any) {
             console.error(err);
@@ -36,14 +38,19 @@ export function PriceListSection() {
     };
 
     useEffect(() => {
-        loadData();
-    }, []);
+        if (activeCliente) {
+            loadData();
+        } else {
+            setListini([]);
+            setLoading(false);
+        }
+    }, [activeCliente?.id]);
 
     const handleSetDefault = async (id: string, type: 'Consuntivo' | 'Fornitore', currentVal: boolean) => {
         if (currentVal) return;
 
         try {
-            await priceListService.setAsDefault(id, type);
+            await priceListService.setAsDefault(id, type, activeCliente?.id);
             await loadData();
         } catch (err: any) {
             console.error(err);

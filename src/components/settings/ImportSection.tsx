@@ -8,8 +8,11 @@ import { Button } from '../../components/ui/button';
 import { Upload, FileSpreadsheet, CheckCircle, AlertCircle, Loader2, ScrollText, Download, CalendarDays } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '../../components/ui/alert';
 import { priceListService } from '../../services/priceListService';
+import { useClient } from '../../contexts/ClientContext';
+import { projectSettingsService } from '../../services/projectSettingsService';
 
 export function ImportSection() {
+    const { activeCliente } = useClient();
     const [file, setFile] = useState<File | null>(null);
     const [previewType, setPreviewType] = useState<'wo' | 'pian' | 'listino' | null>(null);
     const [previewData, setPreviewData] = useState<any[]>([]);
@@ -118,7 +121,7 @@ export function ImportSection() {
             if (previewType === 'listino') {
                 const listinoType = (file?.name.toLowerCase().includes('fornitore')) ? 'Fornitore' : 'Consuntivo';
                 const listinoName = file?.name.replace(/\.[^/.]+$/, "") || 'Nuovo Listino';
-                const headerRes = await priceListService.createHeader(listinoName, listinoType);
+                const headerRes = await priceListService.createHeader(listinoName, listinoType, activeCliente?.id);
                 if (headerRes.error) {
                      setErrorMsg(`Errore creazione testata listino: ${headerRes.error.message}`);
                      setUploading(false);
@@ -140,7 +143,17 @@ export function ImportSection() {
 
                 let error = null;
                 if (previewType === 'wo') {
-                    const res = await workOrderService.createBulk(batch);
+                    // Extract unique projects to ensure they are created in project_settings with active client
+                    const uniqueProjects = new Set<string>();
+                    for (const wo of batch) {
+                        if (wo.progetto) uniqueProjects.add(wo.progetto);
+                    }
+                    // Upsert projects to ensure they are tied to client (no supplier/client lists assigned initially)
+                    for (const p of uniqueProjects) {
+                        await projectSettingsService.upsertSettings(p, null, null, activeCliente?.id);
+                    }
+                    
+                    const res = await workOrderService.createBulk(batch, activeCliente?.id);
                     error = res.error;
                 } else if (previewType === 'pian') {
                     const res = await pianificazioneService.createBulk(batch);
